@@ -272,8 +272,11 @@ class SignalScanner:
         if not self.state["announced"] and now.time() < dtime(15, 30):
             self.state["announced"] = True
             names = ", ".join(SHORT_NAMES[s] for s in strategies)
+            q = self.quotes()
+            atm_px = self._live_price(now, get_atm_strike(spot), "CE") if q else None
+            prices = ("Groww live ✅" if atm_px else f"estimated ⚠️ ({tg.esc((q.last_error or 'no price')[:120])})") if q else "estimated"
             self._send(f"👀 <b>Signal scanner on</b> for {now.strftime('%a %d %b')}\nWatching: {names}\n"
-                       f"NIFTY {spot:,.2f} • VIX {vix or 14:.1f}\nNo orders are placed: alerts only.")
+                       f"NIFTY {spot:,.2f} • VIX {vix or 14:.1f} • Prices: {prices}\nNo orders are placed: alerts only.")
 
         for sid in strategies:
             st = self.state["strategies"][sid]

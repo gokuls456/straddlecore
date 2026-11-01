@@ -24,6 +24,8 @@ logger = logging.getLogger("GrowwQuotes")
 REFRESH_SECONDS = 20
 TOKEN_MAX_AGE = 4 * 3600   # Groww tokens expire daily at 6 AM; refresh well before
 RETRY_LOGIN_AFTER = 300    # after a failed login, wait before trying again
+RETRY_CHAIN_AFTER = 300    # after a failed price fetch, wait before trying again
+# Groww allows ~150 token requests per day, so failures must never trigger a login per tick.
 
 
 def _clean_totp_secret(value: str) -> str:
@@ -61,6 +63,7 @@ class GrowwQuotes:
         self._chain: Dict[Tuple[int, str], float] = {}
         self._chain_expiry = ""
         self._chain_at = 0.0
+        self._chain_failed_at = 0.0
 
     @property
     def configured(self) -> bool:
@@ -106,6 +109,8 @@ class GrowwQuotes:
         exp = expiry.isoformat()
         if self._chain and self._chain_expiry == exp and time.time() - self._chain_at < REFRESH_SECONDS:
             return True
+        if time.time() - self._chain_failed_at < RETRY_CHAIN_AFTER:
+            return False
         if not self._login():
             return False
         try:
@@ -113,8 +118,9 @@ class GrowwQuotes:
         except Exception as exc:
             self.last_error = f"Groww option chain failed: {exc}"
             logger.warning(self.last_error)
-            if "auth" in str(exc).lower() or "token" in str(exc).lower():
-                self.client = None  # force a fresh login next time
+            self._chain_failed_at = time.time()
+            if "expired" in str(exc).lower():
+                self.client = None  # log in again after the cool-down
             return False
         chain = self._parse(raw)
         if not chain:
