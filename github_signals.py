@@ -47,6 +47,12 @@ def load_settings() -> dict:
         "signals": {"enabled": s.get("enabled", True), "strategies": s.get("strategies", ALL_STRATEGIES)},
         "allocated_capital": s.get("capital", 40000),
         # Optional live option prices (GitHub secrets); without them prices are estimates.
+        "indstocks": {
+            "client_id": os.environ.get("INDSTOCKS_CLIENT_ID", ""),
+            "mpin": os.environ.get("INDSTOCKS_MPIN", ""),
+            "totp_secret": os.environ.get("INDSTOCKS_TOTP_SECRET", ""),
+            "access_token": os.environ.get("INDSTOCKS_ACCESS_TOKEN", ""),
+        },
         "groww": {
             "api_key": os.environ.get("GROWW_API_KEY", ""),
             "api_secret": os.environ.get("GROWW_API_SECRET", ""),
@@ -110,7 +116,7 @@ def price_check(scanner: SignalScanner) -> str:
     """One line saying whether live Groww option prices work from here."""
     q = scanner.quotes()
     if not q:
-        return "💲 Prices: estimated (no Groww keys added)"
+        return "💲 Prices: estimated (no price API keys added)"
     now = now_ist()
     spot = 0.0
     try:
@@ -128,9 +134,9 @@ def price_check(scanner: SignalScanner) -> str:
     atm = get_atm_strike(spot)
     px = scanner._live_price(now, atm, "CE")
     if px:
-        return f"💲 Prices: Groww live ✅ (NIFTY {atm} CE ₹{px:,.2f})"
-    log.warning("Groww quote check failed: %s", q.last_error)
-    return f"💲 Prices: estimated ⚠️ Groww: {tg.esc(q.last_error or 'no price returned')}"
+        return f"💲 Prices: {q.name} live ✅ (NIFTY {atm} CE ₹{px:,.2f})"
+    log.warning("%s quote check failed: %s", q.name, q.last_error)
+    return f"💲 Prices: estimated ⚠️ {q.name}: {tg.esc(q.last_error or 'no price returned')}"
 
 
 def write_status(scanner: SignalScanner, now: datetime):
@@ -164,7 +170,8 @@ def main():
         if not (token and chat):
             sys.exit("Test failed: add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID under Settings → Secrets and variables → Actions.")
         scanner = SignalScanner(sender=send, config_loader=load_settings)
-        diagnose_groww(scanner)
+        if scanner.quotes() and scanner.quotes().name == "Groww":
+            diagnose_groww(scanner)
         sample = scanner.sample_text()
         ok, err = tg.send_message(token, chat, "✅ <b>GitHub Actions connected</b>\n" + price_check(scanner)
                                   + "\nWeekday scans will send alerts here. Sample format:\n\n" + sample)

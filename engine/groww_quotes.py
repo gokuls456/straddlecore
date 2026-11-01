@@ -49,6 +49,7 @@ def _num(v: Any) -> float:
 
 
 class GrowwQuotes:
+    name = "Groww"
     def __init__(self, api_key: str, secret: str = "", totp_secret: str = ""):
         self.api_key = (api_key or "").strip()
         self.secret = (secret or "").strip()

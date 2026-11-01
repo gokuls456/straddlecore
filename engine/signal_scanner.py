@@ -29,6 +29,7 @@ import pandas as pd
 
 from engine import telegram_notifier as tg
 from engine.groww_quotes import GrowwQuotes
+from engine.indstocks_quotes import INDstocksQuotes
 from engine.expiry import nifty_weekly_expiry, trading_days_until
 from engine.straddle_engine import bs_call_price, bs_put_price, get_atm_strike
 from engine.strategy_registry import get_strategy
@@ -113,8 +114,8 @@ class SignalScanner:
         self.state_file = state_file
         self.history_file = history_file
         self.config_loader = config_loader  # GitHub runner supplies settings from signals_config.json
-        self._quotes: Optional[GrowwQuotes] = None
-        self._quotes_key: Tuple[str, str, str] = ("", "", "")
+        self._quotes: Optional[Any] = None  # INDstocksQuotes or GrowwQuotes
+        self._quotes_key: Tuple[str, ...] = ()
         self.thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
         self.last_error = ""
@@ -167,14 +168,18 @@ class SignalScanner:
 
     # ---------- pricing ----------
 
-    def quotes(self) -> Optional[GrowwQuotes]:
-        """Groww live-quote client from the configured keys (rebuilt if the keys change)."""
-        g = self._config().get("groww") or {}
-        key = (g.get("api_key") or "", g.get("api_secret") or "", g.get("totp_secret") or "")
-        if not key[0] or not (key[1] or key[2]):
-            self._quotes = None
-        elif key != self._quotes_key or self._quotes is None:
-            self._quotes = GrowwQuotes(*key)
+    def quotes(self) -> Optional[Any]:
+        """Live-quote client: INDstocks if configured, else Groww (rebuilt if the keys change)."""
+        cfg = self._config()
+        i, g = cfg.get("indstocks") or {}, cfg.get("groww") or {}
+        ind = tuple(i.get(k) or "" for k in ("client_id", "mpin", "totp_secret", "access_token"))
+        grw = tuple(g.get(k) or "" for k in ("api_key", "api_secret", "totp_secret"))
+        key = ("ind",) + ind if INDstocksQuotes(*ind).configured else ("groww",) + grw
+        if key != self._quotes_key or self._quotes is None:
+            if key[0] == "ind":
+                self._quotes = INDstocksQuotes(*ind)
+            else:
+                self._quotes = GrowwQuotes(*grw) if grw[0] and (grw[1] or grw[2]) else None
         self._quotes_key = key
         return self._quotes
 
@@ -274,7 +279,7 @@ class SignalScanner:
             names = ", ".join(SHORT_NAMES[s] for s in strategies)
             q = self.quotes()
             atm_px = self._live_price(now, get_atm_strike(spot), "CE") if q else None
-            prices = ("Groww live ✅" if atm_px else f"estimated ⚠️ ({tg.esc((q.last_error or 'no price')[:120])})") if q else "estimated"
+            prices = (f"{q.name} live ✅" if atm_px else f"estimated ⚠️ ({tg.esc((q.last_error or 'no price')[:120])})") if q else "estimated"
             self._send(f"👀 <b>Signal scanner on</b> for {now.strftime('%a %d %b')}\nWatching: {names}\n"
                        f"NIFTY {spot:,.2f} • VIX {vix or 14:.1f} • Prices: {prices}\nNo orders are placed: alerts only.")
 
@@ -474,7 +479,7 @@ class SignalScanner:
                 lines.append("⚠️ No hedge: needs ~₹1.6L+ margin per leg")
         lines += [f"⏰ Exit by {exit_at}", "",
                   f"<i>{tg.esc(trade['why'])} · NIFTY {trade['spot']:,.0f} · "
-                  f"{'Groww live prices' if live else '~ = estimated price'}</i>"]
+                  f"{(self._quotes.name + ' live prices') if live and self._quotes else '~ = estimated price'}</i>"]
         return "\n".join(lines)
 
     def _exit_text(self, sid, trade, reason, pnl, day_pnl, next_step, now) -> str:
@@ -555,7 +560,7 @@ class SignalScanner:
                          "note": st["note"] if st else "", "pnl": round(pnl, 2),
                          "open_trade": st.get("trade") if st and st["status"] == "OPEN" else None})
         q = self.quotes()
-        price_source = "Groww live" if q and q._chain else ("Groww (not connected yet)" if q else "Estimated (no Groww keys)")
+        price_source = f"{q.name} live" if q and q._chain else (f"{q.name} (not connected yet)" if q else "Estimated (no price API keys)")
         return {"settings": self.settings(), "date": self.state.get("date"), "last_tick": self.last_tick,
                 "price_source": price_source, "quotes_error": q.last_error if q else "",
                 "last_error": self.last_error, "running": bool(self.thread and self.thread.is_alive()), "strategies": rows}
