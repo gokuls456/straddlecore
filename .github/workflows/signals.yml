@@ -1,0 +1,51 @@
+name: Strategy signals
+
+# Telegram alerts for all strategies, Mon–Fri. No orders are placed.
+# GitHub jobs are limited to 6 hours, so the market day is split into two runs.
+# Cron times are UTC (IST = UTC + 5:30) and GitHub may start them a few minutes late,
+# so each run starts early and the script waits for market hours.
+on:
+  schedule:
+    - cron: "20 3 * * 1-5"   # 8:50 AM IST → morning run until 12:15 PM
+    - cron: "30 6 * * 1-5"   # 12:00 PM IST → queued behind the morning run, until 3:40 PM
+  workflow_dispatch:
+    inputs:
+      until:
+        description: "Stop at (IST, HH:MM)"
+        default: "15:40"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signals
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-signals.txt
+      - run: pip install -r requirements-signals.txt
+      - name: Run scanner
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TZ: Asia/Kolkata
+        run: |
+          git config user.name "signals-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            UNTIL="${{ inputs.until }}"
+          elif [ "${{ github.event.schedule }}" = "20 3 * * 1-5" ]; then
+            UNTIL="12:15"
+          else
+            UNTIL="15:40"
+          fi
+          python github_signals.py --until "$UNTIL"

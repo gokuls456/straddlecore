@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIFTY 50 Short-Premium ATM Straddle | Algorithmic Backtest Studio</title>
+    <meta name="description" content="Institutional-grade backtesting studio for NIFTY 50 Short-Premium ATM Straddle with leg stop-loss, auto square-off, 15m re-entry, and ±15k portfolio P&L guard.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Plotly.js for interactive charting -->
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo-box">
+                    <span class="logo-icon">⚡</span>
+                    <div class="logo-text">
+                        <span class="brand-title">STRADDLE<span class="accent-cyan">CORE</span></span>
+                        <span class="brand-subtitle">NIFTY 50 • Intraday Short Straddle Automation</span>
+                    </div>
+                </div>
+                <div class="strategy-badge">
+                    <span class="status-dot pulse-green"></span>
+                    <span>4-Branch Parallel Engine • Active</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="account-selector-wrap">
+                    <span class="pill-label">Trading Mode</span>
+                    <select id="account-type-select" class="account-select" onchange="onAccountTypeChange(this.value)">
+                        <option value="demo" selected>🧪 Demo Account (Paper Trading)</option>
+                        <!-- Real account disabled for now: backtest + Telegram signal alerts only.
+                        <option value="original:groww">🟢 Original Account (Groww Live API)</option>
+                        <option value="original:dhan">🔵 Original Account (Dhan Live API)</option>
+                        -->
+                    </select>
+                </div>
+                <div class="balance-pill" id="balance-pill" title="Click to edit demo capital" onclick="onBalancePillClick()">
+                    <span class="pill-label" id="header-balance-label">Demo Capital</span>
+                    <span class="pill-val text-success" id="header-balance-val">—</span>
+                    <span class="pill-edit-icon" id="header-balance-edit">✎</span>
+                    <input type="text" id="header-capital-input" class="pill-input hidden" placeholder="e.g. 50k or 1L"
+                           onkeydown="onCapitalInputKey(event)" onblur="saveDemoCapital()" onclick="event.stopPropagation()">
+                </div>
+                <div class="broker-status-pill" id="broker-status-pill" onclick="toggleKeysDrawer()">
+                    <span class="status-dot pulse-amber" id="broker-dot"></span>
+                    <span id="broker-status-text">Paper Trading</span>
+                </div>
+
+                <!-- Start Algo Live Automation Button -->
+                <button id="btn-toggle-algo" class="btn btn-start-algo" onclick="toggleAlgoExecution()" title="Start / Stop Real-Time Algo Automation">
+                    <span id="algo-btn-icon">▶</span>
+                    <span id="algo-btn-text">Start Algo</span>
+                </button>
+                
+                <button id="export-csv-btn" class="btn btn-secondary" onclick="exportCSV()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Export CSV</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Body -->
+        <main class="app-main">
+            <div class="studio-tabs">
+                <button class="studio-tab active" id="tab-live-desk" onclick="switchStudioTab('live')">
+                    <span>⚡ Live Execution Desk</span>
+                </button>
+                <button class="studio-tab" id="tab-backtest-studio" onclick="switchStudioTab('backtest')">
+                    <span>📊 Multi-Strategy Backtest Studio</span>
+                </button>
+            </div>
+
+            <section id="live-desk-panel" class="live-desk">
+                <div class="live-top-grid">
+                    <!-- ACCOUNT & CAPITAL CARD -->
+                    <div class="section-card live-account-card">
+                        <div class="section-header">
+                            <div class="section-title-wrap">
+                                <span class="section-icon">🏦</span>
+                                <h2 class="section-title">Trading Account & Capital</h2>
+                            </div>
+                            <span class="badge badge-outline" id="live-account-badge">Demo Paper</span>
+                        </div>
+
+                        <!-- Account Switcher Buttons -->
+                        <div class="account-toggle-group">
+                            <button type="button" class="account-toggle-btn active" id="btn-acc-demo" onclick="switchAccount('demo')">
+                                <span class="toggle-icon">🧪</span>
+                                <div class="toggle-text">
+                                    <strong>Demo Account</strong>
+                                    <small>Virtual Paper Trading • Simulated Orders</small>
+                                </div>
+                            </button>
+                            <!-- Real account disabled for now: backtest + Telegram signal alerts only.
+                            <button type="button" class="account-toggle-btn" id="btn-acc-original" onclick="switchAccount('original')">
+                                <span class="toggle-icon">🟢</span>
+                                <div class="toggle-text">
+                                    <strong>Original Account (Groww)</strong>
+                                    <small>Live API Execution • Real NSE F&O Orders</small>
+                                </div>
+                            </button>
+                            -->
+                        </div>
+
+                        <!-- Balances & Auto-Filled Capital Row -->
+                        <div class="account-balance-boxes">
+                            <div class="bal-box bal-primary">
+                                <span class="bal-label" id="live-bal-title">Demo Virtual Cash</span>
+                                <div class="bal-val" id="live-balance-value">—</div>
+                                <span class="bal-sub" id="live-bal-ucc">Simulated Paper Trading</span>
+                            </div>
+                            <div class="bal-box bal-secondary live-only hidden">
+                                <span class="bal-label">Allocated Algo Capital</span>
+                                <div class="bal-val text-cyan" id="live-capital-value">—</div>
+                                <span class="bal-sub" id="live-capital-sub">Uses full demo cash</span>
+                                <div class="alloc-controls">
+                                    <button type="button" class="btn btn-xs btn-outline" id="btn-alloc-custom" onclick="startCustomAllocation()">✎ Custom</button>
+                                    <button type="button" class="btn btn-xs btn-outline" id="btn-alloc-full" onclick="setAllocation('full')">Use Full Funds</button>
+                                    <input type="text" id="alloc-custom-input" class="form-input form-input-mono alloc-input hidden" placeholder="e.g. 40k"
+                                           onkeydown="onAllocInputKey(event)" onblur="saveCustomAllocation()">
+                                </div>
+                            </div>
+                            <div class="bal-action-col">
+                                <button class="btn btn-sm btn-outline live-only hidden" onclick="refreshBalance()" title="Sync live balance from Groww">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                                    <span>Sync</span>
+                                </button>
+                                <button class="btn btn-sm btn-outline live-only hidden" id="btn-toggle-keys" onclick="toggleKeysDrawer()" title="View or edit Groww API credentials">
+                                    <span>🔑 Groww Keys</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Real account disabled for now: Groww / Dhan credentials box commented out.
+                        Groww API Credentials Collapsible Box
+                        <div id="original-keys-box" class="original-keys-box live-only hidden">
+                            <div class="keys-box-header">
+                                <span class="keys-title" id="live-keys-title">Groww Trading API Credentials</span>
+                                <span class="badge badge-outline" id="groww-auth-badge">Not verified</span>
+                            </div>
+                            <div class="live-broker-switch">
+                                <span class="form-label" style="margin:0;">Place orders with:</span>
+                                <button type="button" class="btn btn-xs btn-outline active" id="live-broker-btn-groww" onclick="selectLiveBroker('groww')">Groww</button>
+                                <button type="button" class="btn btn-xs btn-outline" id="live-broker-btn-dhan" onclick="selectLiveBroker('dhan')">Dhan</button>
+                            </div>
+                            <div id="live-creds-dhan" class="hidden">
+                                <div class="form-group" style="margin-bottom:8px;">
+                                    <label class="form-label">Dhan Client ID</label>
+                                    <input type="text" id="live-dhan-client-id" class="form-input form-input-mono" placeholder="e.g. 1100000000">
+                                </div>
+                                <div class="form-group" style="margin-bottom:6px;">
+                                    <label class="form-label">Dhan Access Token</label>
+                                    <div class="input-with-action">
+                                        <input type="password" id="live-dhan-token" class="form-input form-input-mono" placeholder="Paste Dhan access token">
+                                        <button type="button" class="btn-toggle-eye" onclick="toggleInputMask('live-dhan-token')">👁</button>
+                                    </div>
+                                </div>
+                                <div class="bal-sub" style="margin-bottom:10px;">Orders go to Dhan. Live prices come from your saved Groww keys (Dhan Data API is a paid add-on). The token expires daily: paste a new one each morning.</div>
+                            </div>
+                            <div id="live-creds-groww">
+                            <div class="form-group" style="margin-bottom:8px;">
+                                <label class="form-label">Groww API Key</label>
+                                <div class="input-with-action">
+                                    <input type="password" id="live-groww-api-key" class="form-input form-input-mono" placeholder="Paste Groww API Key">
+                                    <button type="button" class="btn-toggle-eye" onclick="toggleInputMask('live-groww-api-key')">👁</button>
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-bottom:10px;">
+                                <label class="form-label">Groww API Secret</label>
+                                <div class="input-with-action">
+                                    <input type="password" id="live-groww-api-secret" class="form-input form-input-mono" placeholder="Paste Groww API Secret">
+                                    <button type="button" class="btn-toggle-eye" onclick="toggleInputMask('live-groww-api-secret')">👁</button>
+                                </div>
+                            </div>
+                            </div>
+                            <div class="key-actions">
+                                <button class="btn btn-sm btn-outline" id="btn-test-live-groww" onclick="testLiveBrokerKeys()">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    <span id="btn-test-live-label">Test Groww Connection</span>
+                                </button>
+                                <button class="btn btn-sm btn-primary" id="btn-save-live-groww" onclick="saveLiveBrokerKeys()">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                    <span>Save Credentials</span>
+                                </button>
+                            </div>
+                            <div id="broker-inline-msg" class="inline-msg"></div>
+                        </div>
+
+                        -->
+
+                        <!-- Telegram alerts (demo and live) -->
+                        <div class="original-keys-box telegram-box">
+                            <div class="keys-box-header">
+                                <span class="keys-title">📲 Telegram Alerts</span>
+                                <label class="tg-toggle">
+                                    <input type="checkbox" id="tg-enabled" onchange="saveTelegramEnabled(this.checked)">
+                                    <span id="tg-enabled-label">Off</span>
+                                </label>
+                            </div>
+                            <ol class="tg-steps">
+                                <li>In Telegram, open <strong>@BotFather</strong>, send <code>/newbot</code>, and copy the token it gives you.</li>
+                                <li>Paste it below, open your new bot and press <strong>Start</strong>.</li>
+                                <li>Click <strong>Connect</strong>, then <strong>Send Test</strong>.</li>
+                            </ol>
+                            <div class="form-group" style="margin-bottom:10px;">
+                                <label class="form-label">Bot Token</label>
+                                <div class="input-with-action">
+                                    <input type="password" id="tg-bot-token" class="form-input form-input-mono" placeholder="123456789:AA...">
+                                    <button type="button" class="btn-toggle-eye" onclick="toggleInputMask('tg-bot-token')">👁</button>
+                                </div>
+                            </div>
+                            <div class="key-actions">
+                                <button class="btn btn-sm btn-outline" id="btn-tg-connect" onclick="connectTelegram()">🔗 Connect</button>
+                                <button class="btn btn-sm btn-primary" id="btn-tg-test" onclick="testTelegram()">📨 Send Test</button>
+                            </div>
+                            <div id="tg-msg" class="inline-msg"></div>
+
+                            <div class="signal-box">
+                                <div class="keys-box-header">
+                                    <span class="keys-title">🔔 Strategy Signal Alerts</span>
+                                    <label class="tg-toggle">
+                                        <input type="checkbox" id="sig-enabled" onchange="saveSignalSettings()">
+                                        <span id="sig-enabled-label">Off</span>
+                                    </label>
+                                </div>
+                                <div class="bal-sub" style="margin-bottom:8px;">Watches these strategies every 30 seconds (Mon–Fri, 9:15–3:30) and sends a Telegram alert when one triggers: what to buy/sell, stop-loss, target, then the exit. No orders are placed.</div>
+                                <div id="sig-strategy-list" class="sig-strategy-list"></div>
+                                <div class="key-actions">
+                                    <button class="btn btn-sm btn-outline" onclick="sendSampleSignal()">📨 Send Sample Signal</button>
+                                </div>
+                                <div id="sig-msg" class="inline-msg"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MULTI-STRATEGY SELECTION CARD -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title-wrap">
+                                <span class="section-icon">🎯</span>
+                                <h2 class="section-title">Active Algorithmic Strategy</h2>
+                            </div>
+                            <span class="badge badge-cyan" id="live-active-strat-badge">1 Lot • ₹30,000 Capital</span>
+                        </div>
+                        <div class="strategy-picker">
+                            <button class="strategy-pick active" data-mode="hedged_selling" onclick="selectLiveStrategy('hedged_selling')">
+                                <div class="pick-top">
+                                    <strong>⚡ Hedged Selling (Iron Butterfly)</strong>
+                                    <span class="strat-tag tag-green">Built for ₹30k</span>
+                                </div>
+                                <span>Sell ATM CE + PE with ±300 OTM Wings • 20% leg SL • 10:00 AM IST</span>
+                            </button>
+                            <button class="strategy-pick" data-mode="nifty_10_12_put" onclick="selectLiveStrategy('nifty_10_12_put')">
+                                <div class="pick-top">
+                                    <strong>📉 10:12 Bearish Put Breakdown</strong>
+                                    <span class="strat-tag tag-cyan">Built for ₹30k</span>
+                                </div>
+                                <span>Buy ATM Put on morning breakdown • 30% SL / 1:2 R:R • 10:12 AM IST</span>
+                            </button>
+                            <button class="strategy-pick" data-mode="nifty_gap_drive" onclick="selectLiveStrategy('nifty_gap_drive')">
+                                <div class="pick-top">
+                                    <strong>🚀 Nifty Gap Drive Momentum</strong>
+                                    <span class="strat-tag tag-amber">Built for ₹30k</span>
+                                </div>
+                                <span>Opening gap continuation • Directional ATM Option • 09:45 AM IST</span>
+                            </button>
+                            <button class="strategy-pick" data-mode="nifty_1pm_drop" onclick="selectLiveStrategy('nifty_1pm_drop')">
+                                <div class="pick-top">
+                                    <strong>💥 1 PM Volatility Drop</strong>
+                                    <span class="strat-tag tag-purple">Built for ₹30k</span>
+                                </div>
+                                <span>European open breakdown • 3-candle drop trigger • 01:00 PM IST</span>
+                            </button>
+                            <button class="strategy-pick" data-mode="option_buying" onclick="selectLiveStrategy('option_buying')">
+                                <div class="pick-top">
+                                    <strong>🎯 Option Buying (Long Straddle)</strong>
+                                    <span class="strat-tag tag-cyan">Zero Margin Block</span>
+                                </div>
+                                <span>Buy ATM CE + PE • Risk capped at premium • 10:00 AM IST</span>
+                            </button>
+                            <button class="strategy-pick" data-mode="short_straddle" onclick="selectLiveStrategy('short_straddle')">
+                                <div class="pick-top">
+                                    <strong>🏛️ Classic Short Straddle</strong>
+                                    <span class="strat-tag tag-orange">Institutional (₹5L+)</span>
+                                </div>
+                                <span>Naked 10 lots short straddle • 20% SL • High theta capture</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Algo Automation Execution Bar -->
+                <div class="algo-execution-bar" id="algo-execution-bar">
+                    <div class="algo-bar-left">
+                        <span class="algo-status-badge status-idle" id="algo-status-badge">ALGO IDLE</span>
+                        <div class="algo-status-desc-wrap">
+                            <span class="algo-status-desc" id="algo-status-desc">
+                                Algo engine ready on <strong>ORIGINAL (GROWW LIVE)</strong>. Auto-filled capital: <strong>₹30,000</strong>. When the strategy trigger hits, it places the order directly on Groww.
+                            </span>
+                        </div>
+                    </div>
+                    <div class="algo-bar-right">
+                        <button class="btn btn-sm btn-outline-cyan" onclick="runPaperTestCycle()" title="Execute an instant test session to verify orders &amp; P&amp;L">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            <span>⚡ Test Trigger / Cycle</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="emergencySquareOffAll()" title="Immediately close all open positions at market price">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                            <span>Square Off All</span>
+                        </button>
+                        <button class="btn btn-sm btn-start-algo" id="algo-bar-action-btn" onclick="toggleAlgoExecution()">
+                            <span id="algo-bar-action-icon">▶</span>
+                            <span id="algo-bar-action-text">Start Algo</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live KPIs Row -->
+                <div class="live-kpi-row">
+                    <div class="live-kpi">
+                        <span>Today Net P&amp;L</span>
+                        <strong id="live-day-pnl">₹0.00</strong>
+                    </div>
+                    <div class="live-kpi">
+                        <span>NIFTY 50 Spot</span>
+                        <strong id="live-spot-val" class="text-cyan">—</strong>
+                    </div>
+                    <div class="live-kpi">
+                        <span>Active Open Legs</span>
+                        <strong id="live-open-count">0 Legs</strong>
+                    </div>
+                    <div class="live-kpi">
+                        <span>Portfolio Guard</span>
+                        <strong id="live-guard-val" class="text-warning">±₹3,000 (10%)</strong>
+                    </div>
+                </div>
+
+                <!-- Live Positions Table & Order Event Log -->
+                <div class="live-bottom-grid">
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title-wrap">
+                                <span class="section-icon">📦</span>
+                                <h2 class="section-title">Active Strategy Positions</h2>
+                            </div>
+                            <span class="badge badge-outline" id="positions-count-badge">0 Positions</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Leg / Strike</th>
+                                        <th>Branch / Setup</th>
+                                        <th>Side</th>
+                                        <th>Qty</th>
+                                        <th>Entry Price</th>
+                                        <th>LTP</th>
+                                        <th>P&amp;L (₹)</th>
+                                        <th>Status</th>
+                                        <th>Order ID</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="live-positions-tbody">
+                                    <tr>
+                                        <td colspan="9" class="text-muted" style="text-align: center; padding: 24px;">
+                                            No positions yet. Click <strong>Start Algo</strong> to arm the automation, or click <strong>⚡ Test Trigger / Cycle</strong> to simulate an instant execution cycle.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title-wrap">
+                                <span class="section-icon">🛰️</span>
+                                <h2 class="section-title">Real-Time Order &amp; Event Log</h2>
+                            </div>
+                            <button class="btn btn-xs btn-outline" onclick="clearLiveEvents()">Clear</button>
+                        </div>
+                        <div class="timeline-items" id="live-event-log">
+                            <div class="timeline-item">
+                                <span class="timeline-time">Ready</span>
+                                <span class="timeline-desc">Algo engine standing by. Choose Original (Groww) or Demo, select strategy, and start algo.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div id="backtest-studio-panel" class="hidden">
+            <div class="backtest-toolbar">
+                <div class="toolbar-strategy-select-wrap">
+                    <span class="toolbar-label">Strategy:</span>
+                    <select id="bt-quick-strategy" class="form-select toolbar-select" onchange="onQuickStrategySelect(this.value)">
+                        <option value="hedged_selling" selected>⚡ Hedged Selling (Iron Butterfly)</option>
+                        <option value="nifty_10_12_put">📉 10:12 Bearish Put Breakdown</option>
+                        <option value="nifty_gap_drive">🚀 Nifty Gap Drive Momentum</option>
+                        <option value="nifty_1pm_drop">💥 1 PM Volatility Drop</option>
+                        <option value="option_buying">🎯 Option Buying (Long Straddle)</option>
+                        <option value="short_straddle">🏛️ Classic Short Straddle</option>
+                    </select>
+                </div>
+                <div class="toolbar-period-select-wrap">
+                    <span class="toolbar-label">Period:</span>
+                    <select id="bt-quick-period" class="form-select toolbar-select" onchange="onQuickPeriodSelect()">
+                        <option value="1 month">1 Month (Recent 21 Days)</option>
+                        <option value="3 months">3 Months (~62 Days)</option>
+                        <option value="6 months">6 Months (~125 Days)</option>
+                        <option value="1 year" selected>1 Year (247 Days)</option>
+                        <option value="2 years">2 Years</option>
+                        <option value="3 years">3 Years</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary btn-glow" onclick="runBacktest()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Run Backtest</span>
+                </button>
+                <button class="btn btn-outline" onclick="openConfigModal()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+                    <span>Backtest Config</span>
+                </button>
+                <button class="btn btn-secondary" onclick="exportCSV()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Export CSV</span>
+                </button>
+            </div>
+            <!-- Strategy Architecture Flowchart -->
+            <section class="section-card architecture-section">
+                <div class="section-header arch-toggle" onclick="toggleArchitecture()" title="Show / hide strategy explanation">
+                    <div class="section-title-wrap">
+                        <span class="section-icon">🔀</span>
+                        <h2 class="section-title">Automated Multi-Branch Strategy Architecture</h2>
+                    </div>
+                    <span class="badge badge-outline" id="arch-toggle-label">Show ▾</span>
+                </div>
+                <div id="arch-body" class="hidden">
+                
+                <div class="flowchart-container">
+                    <!-- Root Node -->
+                    <div class="flow-root-node">
+                        <div class="node-badge">START TRIGGER</div>
+                        <div class="node-title">10:00 AM IST (Mon-Fri)</div>
+                        <div class="node-desc">Underlying: NIFTY 50 Options (Current Weekly Expiry)</div>
+                    </div>
+
+                    <!-- Flow connector line -->
+                    <div class="flow-connector">
+                        <div class="connector-line"></div>
+                        <div class="connector-branch-split"></div>
+                    </div>
+
+                    <!-- 4 Parallel Branches Grid -->
+                    <div class="branches-grid">
+                        <!-- Branch 1 -->
+                        <div class="branch-card branch-ce">
+                            <div class="branch-header">
+                                <span class="branch-tag tag-ce">BRANCH 1</span>
+                                <span class="branch-title">CE Leg Entry</span>
+                            </div>
+                            <div class="branch-body">
+                                <div class="step-item">
+                                    <span class="step-num">1</span>
+                                    <span>Sell <strong>1 ATM CE</strong> (10 Lots)</span>
+                                </div>
+                                <div class="step-item">
+                                    <span class="step-num">2</span>
+                                    <span>Stop-Loss: <strong>20%</strong> with Auto Square-off</span>
+                                </div>
+                                <div class="step-item text-danger">
+                                    <span class="step-num">3</span>
+                                    <span>If SL Hit: <strong>Square off ALL</strong> open positions (incl. PE)</span>
+                                </div>
+                                <div class="step-item text-cyan">
+                                    <span class="step-num">4</span>
+                                    <span>Wait <strong>15 mins</strong> ➔ Re-enter 1 Lot CE & 1 Lot PE (No SL)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Branch 2 -->
+                        <div class="branch-card branch-pe">
+                            <div class="branch-header">
+                                <span class="branch-tag tag-pe">BRANCH 2</span>
+                                <span class="branch-title">PE Leg Entry</span>
+                            </div>
+                            <div class="branch-body">
+                                <div class="step-item">
+                                    <span class="step-num">1</span>
+                                    <span>Sell <strong>1 ATM PE</strong> (10 Lots)</span>
+                                </div>
+                                <div class="step-item">
+                                    <span class="step-num">2</span>
+                                    <span>Stop-Loss: <strong>20%</strong> with Auto Square-off</span>
+                                </div>
+                                <div class="step-item text-danger">
+                                    <span class="step-num">3</span>
+                                    <span>If SL Hit: <strong>Square off ALL</strong> open positions (incl. CE)</span>
+                                </div>
+                                <div class="step-item text-cyan">
+                                    <span class="step-num">4</span>
+                                    <span>Wait <strong>15 mins</strong> ➔ Re-enter 1 Lot PE & 1 Lot CE (No SL)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Branch 3 -->
+                        <div class="branch-card branch-guard">
+                            <div class="branch-header">
+                                <span class="branch-tag tag-guard">BRANCH 3</span>
+                                <span class="branch-title">Portfolio P&L Guard</span>
+                            </div>
+                            <div class="branch-body">
+                                <div class="step-item">
+                                    <span class="step-num">1</span>
+                                    <span>Continuous evaluation: <strong>Every 10 seconds</strong></span>
+                                </div>
+                                <div class="step-item">
+                                    <span class="step-num">2</span>
+                                    <span>Condition: <strong>Open Positions &gt; 0</strong></span>
+                                </div>
+                                <div class="step-item text-success">
+                                    <span class="step-num">3</span>
+                                    <span>Profit Target: <strong>&ge; +₹15,000</strong></span>
+                                </div>
+                                <div class="step-item text-danger">
+                                    <span class="step-num">4</span>
+                                    <span>Max Loss Stop: <strong>&le; −₹15,000</strong> ➔ Hard Stop & Square Off</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Branch 4 -->
+                        <div class="branch-card branch-time">
+                            <div class="branch-header">
+                                <span class="branch-tag tag-time">BRANCH 4</span>
+                                <span class="branch-title">EOD Time Exit</span>
+                            </div>
+                            <div class="branch-body">
+                                <div class="step-item">
+                                    <span class="step-num">1</span>
+                                    <span>Continuous clock monitor</span>
+                                </div>
+                                <div class="step-item">
+                                    <span class="step-num">2</span>
+                                    <span>Mandatory Exit Time: <strong>3:25 PM IST</strong></span>
+                                </div>
+                                <div class="step-item">
+                                    <span class="step-num">3</span>
+                                    <span>Stop automation run</span>
+                                </div>
+                                <div class="step-item text-warning">
+                                    <span class="step-num">4</span>
+                                    <span>Square off any open straddle positions</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+            </section>
+
+            <!-- Loading State Bar -->
+            <div id="loading-bar-container" class="loading-bar-container hidden">
+                <div class="loading-content">
+                    <div class="spinner"></div>
+                    <div class="loading-text">
+                        <strong id="loading-title">Executing Multi-Period Intraday Backtest...</strong>
+                        <span id="loading-subtitle">Simulating 1-second/5-minute path, Black-Scholes Greeks, leg stop-loss triggers & re-entries</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Backtest Metadata Overview Bar (Visible, Transparent, Understandable) -->
+            <div class="active-config-banner" id="active-config-banner">
+                <div class="active-config-item">
+                    <span class="active-config-icon">🎯</span>
+                    <div class="active-config-info">
+                        <span class="active-config-label">Strategy Mode</span>
+                        <strong class="active-config-value text-cyan" id="bar-mode-val">Option Buying (Long Straddle)</strong>
+                    </div>
+                </div>
+                <div class="active-config-item">
+                    <span class="active-config-icon">📅</span>
+                    <div class="active-config-info">
+                        <span class="active-config-label">Active Time Period</span>
+                        <strong class="active-config-value" id="bar-period-val">1 Year (247 Trading Days)</strong>
+                    </div>
+                </div>
+                <div class="active-config-item">
+                    <span class="active-config-icon">💰</span>
+                    <div class="active-config-info">
+                        <span class="active-config-label">Configured Capital</span>
+                        <strong class="active-config-value text-cyan" id="bar-capital-val">₹40,000</strong>
+                    </div>
+                </div>
+                <div class="active-config-item">
+                    <span class="active-config-icon">📊</span>
+                    <div class="active-config-info">
+                        <span class="active-config-label">Position Sizing</span>
+                        <strong class="active-config-value" id="bar-lots-val">Auto-Sized by Capital</strong>
+                    </div>
+                </div>
+                <div class="active-config-item">
+                    <span class="active-config-icon">📈</span>
+                    <div class="active-config-info">
+                        <span class="active-config-label">Net Return (ROI)</span>
+                        <strong class="active-config-value text-success" id="bar-roi-val">+0.0% ROI</strong>
+                    </div>
+                </div>
+                <div class="active-config-item">
+                    <span class="active-config-icon">🛡️</span>
+                    <div class="active-config-info">
+                        <span class="active-config-label">Strategy Guard</span>
+                        <strong class="active-config-value text-warning" id="bar-guard-val">SL 20% • Target +₹4,000 • Stop -₹4,000</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI Summary Cards Grid -->
+            <section class="kpi-grid">
+                <div class="kpi-card" id="kpi-net-pnl">
+                    <div class="kpi-top">
+                        <span class="kpi-title">TOTAL NET P&L</span>
+                        <span class="kpi-badge" id="kpi-roi-badge">+0.0% ROI</span>
+                    </div>
+                    <div class="kpi-value" id="val-net-pnl">₹0.00</div>
+                    <div class="kpi-footer">
+                        <span>Gross: <strong id="val-gross-pnl">₹0.00</strong></span>
+                        <span>Charges: <strong id="val-charges">₹0.00</strong></span>
+                    </div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-top">
+                        <span class="kpi-title">WIN RATE</span>
+                        <span class="kpi-badge text-cyan" id="val-total-trades">0 Sessions</span>
+                    </div>
+                    <div class="kpi-value" id="val-win-rate">0.0%</div>
+                    <div class="kpi-footer">
+                        <span class="text-success"><strong id="val-win-days">0</strong> Win Days</span>
+                        <span class="text-danger"><strong id="val-loss-days">0</strong> Loss Days</span>
+                    </div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-top">
+                        <span class="kpi-title">PROFIT FACTOR</span>
+                        <span class="kpi-badge">Risk/Reward</span>
+                    </div>
+                    <div class="kpi-value text-accent" id="val-profit-factor">0.00</div>
+                    <div class="kpi-footer">
+                        <span>Avg Win: <strong id="val-avg-win">₹0</strong></span>
+                        <span>Avg Loss: <strong id="val-avg-loss">₹0</strong></span>
+                    </div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-top">
+                        <span class="kpi-title">MAX DRAWDOWN</span>
+                        <span class="kpi-badge text-danger" id="val-max-dd-pct">0.0%</span>
+                    </div>
+                    <div class="kpi-value text-danger" id="val-max-dd">₹0.00</div>
+                    <div class="kpi-footer">
+                        <span>Worst Day: <strong class="text-danger" id="val-worst-day">₹0</strong></span>
+                        <span>Best Day: <strong class="text-success" id="val-best-day">₹0</strong></span>
+                    </div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-top">
+                        <span class="kpi-title">SHARPE & SORTINO</span>
+                        <span class="kpi-badge">Annualized</span>
+                    </div>
+                    <div class="kpi-value" id="val-sharpe">0.00</div>
+                    <div class="kpi-footer">
+                        <span>Sharpe: <strong id="val-sharpe-num">0.00</strong></span>
+                        <span>Sortino: <strong id="val-sortino-num">0.00</strong></span>
+                    </div>
+                </div>
+
+                <div class="kpi-card">
+                    <div class="kpi-top">
+                        <span class="kpi-title">AVG DAILY P&L</span>
+                        <span class="kpi-badge">Expectancy</span>
+                    </div>
+                    <div class="kpi-value" id="val-avg-daily">₹0.00</div>
+                    <div class="kpi-footer">
+                        <span>Capital: <strong id="val-capital-used">₹5,00,000</strong></span>
+                        <span>Period: <strong id="val-period-used">1 Year</strong></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Branch Trigger Analytics Strip -->
+            <section class="branch-stats-strip">
+                <div class="strip-item">
+                    <span class="strip-label">Branch 1 (CE SL Hit)</span>
+                    <strong class="strip-val text-warning" id="stat-ce-sl">0 (0%)</strong>
+                </div>
+                <div class="strip-item">
+                    <span class="strip-label">Branch 2 (PE SL Hit)</span>
+                    <strong class="strip-val text-warning" id="stat-pe-sl">0 (0%)</strong>
+                </div>
+                <div class="strip-item">
+                    <span class="strip-label">Both SLs Hit (Dual Re-entry)</span>
+                    <strong class="strip-val text-danger" id="stat-both-sl">0</strong>
+                </div>
+                <div class="strip-item">
+                    <span class="strip-label">15m Re-entries Executed</span>
+                    <strong class="strip-val text-cyan" id="stat-reentry-days">0</strong>
+                </div>
+                <div class="strip-item">
+                    <span class="strip-label">Guard Target (+₹15k)</span>
+                    <strong class="strip-val text-success" id="stat-guard-target">0</strong>
+                </div>
+                <div class="strip-item">
+                    <span class="strip-label">Guard Stop (−₹15k)</span>
+                    <strong class="strip-val text-danger" id="stat-guard-stop">0</strong>
+                </div>
+                <div class="strip-item">
+                    <span class="strip-label">Branch 4 (3:25 PM Exit)</span>
+                    <strong class="strip-val text-accent" id="stat-time-exit">0</strong>
+                </div>
+            </section>
+
+            <!-- Interactive Charts Section -->
+            <section class="section-card charts-section">
+                <div class="tabs-header">
+                    <div class="tab-buttons">
+                        <button id="tab-btn-equity" class="tab-btn active" onclick="switchChartTab('equity')">Cumulative Equity & Drawdown</button>
+                        <button id="tab-btn-monthly" class="tab-btn" onclick="switchChartTab('monthly')">Monthly Returns Matrix (Heatmap)</button>
+                        <button id="tab-btn-distribution" class="tab-btn" onclick="switchChartTab('distribution')">Daily P&L Distribution</button>
+                    </div>
+                    <div class="chart-controls">
+                        <button class="btn btn-sm btn-outline" onclick="resetChartZoom()">Reset Zoom</button>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-equity">
+                    <div id="plotly-equity-chart" class="plotly-container"></div>
+                </div>
+                <div class="tab-content hidden" id="tab-monthly">
+                    <div class="monthly-matrix-wrapper" id="monthly-matrix-container"></div>
+                </div>
+                <div class="tab-content hidden" id="tab-distribution">
+                    <div id="plotly-dist-chart" class="plotly-container"></div>
+                </div>
+            </section>
+
+            <!-- Detailed Trade Log Section -->
+            <section class="section-card table-section">
+                <div class="table-header-controls">
+                    <div class="table-title-box">
+                        <span class="section-icon">📋</span>
+                        <h3 class="section-title">Session-by-Session Trade Execution Log</h3>
+                        <span class="badge" id="trade-count-badge">0 Trades</span>
+                    </div>
+
+                    <div class="table-actions">
+                        <!-- Filter Chips -->
+                        <div class="filter-chips">
+                            <button class="filter-chip active" data-filter="all" onclick="filterTable('all')">All</button>
+                            <button class="filter-chip" data-filter="win" onclick="filterTable('win')">Wins</button>
+                            <button class="filter-chip" data-filter="loss" onclick="filterTable('loss')">Losses</button>
+                            <button class="filter-chip" data-filter="ce_sl" onclick="filterTable('ce_sl')">CE SL Hit</button>
+                            <button class="filter-chip" data-filter="pe_sl" onclick="filterTable('pe_sl')">PE SL Hit</button>
+                            <button class="filter-chip" data-filter="guard" onclick="filterTable('guard')">Guard Hit</button>
+                            <button class="filter-chip" data-filter="reentry" onclick="filterTable('reentry')">Re-entries</button>
+                        </div>
+                        <input type="text" id="table-search" placeholder="Search by date (YYYY-MM-DD)..." oninput="searchTable(this.value)" class="search-input">
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="data-table" id="trades-table">
+                        <thead>
+                            <tr>
+                                <th onclick="toggleDateSort()" style="cursor: pointer; user-select: none;" title="Click to toggle Ascending / Descending order">
+                                    Date <span id="sort-date-icon" style="font-size: 11px; color: var(--accent-cyan); font-weight: 700; margin-left: 4px;">▼ (Latest)</span>
+                                </th>
+                                <th>Day</th>
+                                <th>Spot @ 10:00</th>
+                                <th>CE Leg</th>
+                                <th>PE Leg</th>
+                                <th>Re-entries</th>
+                                <th>Exit Reason</th>
+                                <th>Gross P&L</th>
+                                <th>Charges</th>
+                                <th>Net P&L (₹)</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-tbody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-pagination">
+                    <div class="pagination-info" id="pagination-info">Showing 0 of 0 sessions</div>
+                    <div class="pagination-buttons">
+                        <button class="btn btn-sm btn-outline" id="prev-page-btn" onclick="changePage(-1)">Previous</button>
+                        <span id="page-num-indicator" class="page-num">1 / 1</span>
+                        <button class="btn btn-sm btn-outline" id="next-page-btn" onclick="changePage(1)">Next</button>
+                    </div>
+                </div>
+            </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- BACKTEST CONFIGURATION MODAL (CLEAN, MINIMAL, NO QUOTAS / NO DISCLAIMERS) -->
+    <div id="config-modal-overlay" class="modal-overlay hidden" onclick="handleOverlayClick(event)">
+        <div class="modal-dialog modal-dialog-md" id="config-modal-dialog">
+            <!-- Modal Header -->
+            <div class="modal-header">
+                <div>
+                    <h3 class="modal-title">⚙️ Backtest Configuration</h3>
+                    <div class="modal-subtitle">Lots, risk &amp; execution settings</div>
+                </div>
+                <button class="modal-close-btn" onclick="closeConfigModal()" title="Close">&times;</button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="modal-body">
+                <div class="modal-context-line" id="modal-context-line">
+                    <!-- Filled by JS: strategy & period from toolbar, capital from header -->
+                </div>
+
+                <!-- 2. Out-of-sample Toggle -->
+                <div class="form-group-checkbox">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="cfg-exclude-last-30">
+                        <span class="toggle-text">Exclude recent 30 days (Out-of-sample forward test)</span>
+                    </label>
+                </div>
+
+                <!-- 4. Position Sizing Mode -->
+                <div class="form-group">
+                    <label class="form-label">Position Sizing & Lot Calculation</label>
+                    <div class="radio-pill-group">
+                        <label class="radio-pill">
+                            <input type="radio" name="cfg-sizing-mode" value="auto_capital" checked onchange="updateCapitalPreview()">
+                            <span><strong>Auto-Scale by Capital</strong> (lots sized from your capital)</span>
+                        </label>
+                        <label class="radio-pill">
+                            <input type="radio" name="cfg-sizing-mode" value="fixed_lots" onchange="updateCapitalPreview()">
+                            <span><strong>Fixed Lots Rule</strong> (Always fixed lots below)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 5. Strategy Parameters Grid (Simple & Visible) -->
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label class="form-label" for="cfg-initial-lots">Lots Traded (CE & PE)</label>
+                        <input type="number" id="cfg-initial-lots" class="form-input" value="1" min="1" max="100" oninput="onLotsEdited()">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cfg-slippage">Execution Slippage (%)</label>
+                        <input type="number" id="cfg-slippage" class="form-input" value="0" min="0" max="5" step="0.1" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cfg-sl-pct">Leg Stop-Loss (%)</label>
+                        <input type="number" id="cfg-sl-pct" class="form-input" value="20" min="5" max="100" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cfg-reentry-wait">Re-entry Wait (Mins)</label>
+                        <input type="number" id="cfg-reentry-wait" class="form-input" value="15" min="1" max="60">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cfg-reentry-sl-pct" title="Stop-loss on the re-entry trade. 0 = no stop-loss (old behaviour).">Re-entry Stop-Loss (%) <span class="text-muted">0 = off</span></label>
+                        <input type="number" id="cfg-reentry-sl-pct" class="form-input" value="40" min="0" max="100" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cfg-pl-target">P&L Guard Target (₹)</label>
+                        <input type="number" id="cfg-pl-target" class="form-input" value="15000" step="1000">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cfg-pl-stop">P&L Guard Stop (₹)</label>
+                        <input type="number" id="cfg-pl-stop" class="form-input" value="-15000" step="1000">
+                    </div>
+                </div>
+
+                <!-- Hidden inputs for engine compatibility -->
+                <input type="hidden" id="cfg-lot-size" value="65">
+                <input type="hidden" id="cfg-reentry-lots" value="1">
+
+                <!-- Live Configuration Summary Banner -->
+                <div class="modal-summary-card" id="modal-summary-card">
+                    <div class="summary-label">Simulation Summary</div>
+                    <div class="summary-text" id="modal-summary-text">
+                        Running <strong>1 Year</strong> backtest with <strong>₹5,00,000</strong> capital trading <strong>10 Lots</strong> CE & PE.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeConfigModal()">Cancel</button>
+                <button class="btn btn-primary btn-glow" id="run-backtest-modal-btn" onclick="executeBacktestFromModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Save &amp; Run Backtest</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MANUAL TRADE ALERT: shown when the algo's own entry is rejected -->
+    <div id="manual-trade-overlay" class="modal-overlay hidden">
+        <div class="modal-dialog modal-dialog-lg manual-trade-dialog">
+            <div class="modal-header">
+                <div>
+                    <h3 class="modal-title">⚠ Algo entry failed: place this trade manually</h3>
+                    <div class="modal-subtitle" id="manual-trade-subtitle">—</div>
+                </div>
+                <button class="modal-close-btn" onclick="dismissManualTrade()" title="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="manual-trade-stuck" class="manual-trade-warn hidden"></div>
+                <div style="overflow-x: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>#</th><th>Action</th><th>Contract</th><th>Qty</th><th>Ref. Price</th><th>Stop-Loss</th></tr>
+                        </thead>
+                        <tbody id="manual-trade-tbody"></tbody>
+                    </table>
+                </div>
+                <ul class="manual-trade-notes" id="manual-trade-notes"></ul>
+                <div class="manual-trade-actions">
+                    <button class="btn btn-sm btn-outline" onclick="dismissManualTrade()">Dismiss</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DAY INTRADAY INSPECTION MODAL -->
+    <div id="day-modal-overlay" class="modal-overlay hidden" onclick="handleDayOverlayClick(event)">
+        <div class="modal-dialog modal-dialog-lg" id="day-modal-dialog">
+            <div class="modal-header">
+                <div>
+                    <h3 class="modal-title" id="day-modal-title">Session Intraday Audit</h3>
+                    <div class="modal-subtitle" id="day-modal-subtitle">NIFTY 50 • Full 10:00 AM to 15:25 Timeline</div>
+                </div>
+                <button class="modal-close-btn" onclick="closeDayModal()" title="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Day Summary Badges -->
+                <div class="day-stats-banner" id="day-stats-banner">
+                    <!-- Dynamic -->
+                </div>
+
+                <!-- Intraday PnL Chart -->
+                <div class="intraday-chart-box">
+                    <h4 class="box-title">Intraday P&L Trajectory (₹) & Stop Loss / Guard Thresholds</h4>
+                    <div id="plotly-day-chart" style="width: 100%; height: 280px;"></div>
+                </div>
+
+                <!-- Leg Breakdown Table -->
+                <div class="leg-breakdown-box">
+                    <h4 class="box-title">Positions Executed in this Automation</h4>
+                    <table class="data-table sub-table">
+                        <thead>
+                            <tr>
+                                <th>Position / Leg</th>
+                                <th>Branch</th>
+                                <th>Quantity</th>
+                                <th>Entry Premium</th>
+                                <th>Exit Premium</th>
+                                <th>Exit Reason</th>
+                                <th>Net P&L (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="day-positions-tbody">
+                            <!-- Dynamic -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Event Timeline Log -->
+                <div class="timeline-box">
+                    <h4 class="box-title">Chronological Automation Events</h4>
+                    <div class="timeline-items" id="day-timeline-items">
+                        <!-- Dynamic -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDayModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LIVE BROKER API CONFIGURATION MODAL (Groww & Zerodha Kite) -->
+    <div id="broker-modal-overlay" class="modal-overlay hidden" onclick="handleBrokerOverlayClick(event)">
+        <div class="modal-dialog modal-dialog-md" id="broker-modal-dialog">
+            <div class="modal-header">
+                <div>
+                    <h3 class="modal-title">⚡ Connect Real-Time Broker API</h3>
+                    <div class="modal-subtitle">Direct Institutional Order Routing & Live Intraday Option Ticks</div>
+                </div>
+                <button class="modal-close-btn" onclick="closeBrokerModal()" title="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Broker Selection Tabs -->
+                <div class="broker-tabs">
+                    <button class="broker-tab-btn active" id="tab-broker-groww" onclick="switchBrokerTab('groww')">
+                        <span class="broker-icon">🌱</span>
+                        <div class="broker-tab-text">
+                            <strong>Groww Trading API</strong>
+                            <small>REST API & Live Option Quotes</small>
+                        </div>
+                    </button>
+                    <button class="broker-tab-btn" id="tab-broker-kite" onclick="switchBrokerTab('kite')">
+                        <span class="broker-icon">🪁</span>
+                        <div class="broker-tab-text">
+                            <strong>Zerodha Kite Connect</strong>
+                            <small>Kite Connect 3.0 API & WebSockets</small>
+                        </div>
+                    </button>
+                </div>
+
+                <!-- Live Status Banner -->
+                <div id="broker-status-alert" class="broker-alert broker-alert-idle">
+                    <div class="alert-icon">⚡</div>
+                    <div class="alert-info">
+                        <strong id="broker-alert-title">API Authentication Ready</strong>
+                        <span id="broker-alert-msg">Enter your API credentials to stream live ticks and route orders for the 4-branch straddle strategy.</span>
+                    </div>
+                </div>
+
+                <!-- Groww Config Form -->
+                <div id="form-broker-groww" class="broker-form-panel">
+                    <div class="form-group">
+                        <label class="form-label">Groww Client ID / User ID <span class="text-danger">*</span></label>
+                        <input type="text" id="groww-client-id" class="form-input" placeholder="e.g. GRW1098452">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Groww API Key <span class="text-danger">*</span></label>
+                        <input type="text" id="groww-api-key" class="form-input" placeholder="Paste Groww API key">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Groww API Secret <span class="text-danger">*</span></label>
+                        <input type="password" id="groww-api-secret" class="form-input" placeholder="Paste Groww API secret">
+                        <input type="hidden" id="groww-auth-token">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Execution Environment</label>
+                        <div class="radio-pill-group">
+                            <label class="radio-pill">
+                                <input type="radio" name="groww-mode" value="paper" checked>
+                                <span>Paper Trading (Live Market Ticks, Simulated Fills)</span>
+                            </label>
+                            <label class="radio-pill">
+                                <input type="radio" name="groww-mode" value="live">
+                                <span class="text-warning">Live Execution (Direct NSE Order Placement)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zerodha Kite Form -->
+                <div id="form-broker-kite" class="broker-form-panel hidden">
+                    <div class="form-group">
+                        <label class="form-label">Kite Connect API Key <span class="text-danger">*</span></label>
+                        <input type="text" id="kite-api-key" class="form-input" placeholder="e.g. 7q8z9w9e9...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Kite API Secret <span class="text-danger">*</span></label>
+                        <input type="password" id="kite-api-secret" class="form-input" placeholder="e.g. a1b2c3d4e5f6...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Request Token / Access Token</label>
+                        <input type="password" id="kite-access-token" class="form-input" placeholder="Generated from Kite login redirect">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Execution Environment</label>
+                        <div class="radio-pill-group">
+                            <label class="radio-pill">
+                                <input type="radio" name="kite-mode" value="paper" checked>
+                                <span>Paper Trading (Live Market Ticks, Simulated Fills)</span>
+                            </label>
+                            <label class="radio-pill">
+                                <input type="radio" name="kite-mode" value="live">
+                                <span class="text-warning">Live Execution (Direct NSE Order Placement)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="modal-footer" style="justify-content: space-between;">
+                <button class="btn btn-secondary" onclick="closeBrokerModal()">Cancel</button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-outline" id="btn-test-broker" onclick="testBrokerConnection()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        <span>Test Connection</span>
+                    </button>
+                    <button class="btn btn-primary btn-glow" id="btn-save-broker" onclick="saveBrokerConfig()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        <span>Save & Enable Live Automation</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

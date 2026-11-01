@@ -1,0 +1,9 @@
+# Secrets and local state: broker keys, Telegram token, caches
+cache/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.claude/
+*.env
+.env*

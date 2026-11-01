@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StraddleCore Signals</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #16181d; --muted: #6b7280; --line: #e5e7eb;
+    --pos: #0f8a4f; --neg: #c8312f; --accent: #2563eb; --chip: #eef2f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #161b22; --text: #e6edf3; --muted: #8b949e; --line: #30363d;
+      --pos: #3fb950; --neg: #f85149; --accent: #58a6ff; --chip: #21262d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 15px; margin: 26px 0 10px; }
+  .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .card .k { color: var(--muted); font-size: 12px; }
+  .card .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .pos { color: var(--pos); } .neg { color: var(--neg); }
+  .table-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 99px; background: var(--chip); font-size: 12px; }
+  .note { color: var(--muted); font-size: 12px; white-space: normal; min-width: 160px; }
+  .legs { color: var(--muted); font-size: 12px; white-space: normal; margin-top: 3px; }
+  .empty { color: var(--muted); padding: 14px; }
+  .foot { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  @media (max-width: 600px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>📈 StraddleCore Signals</h1>
+  <div class="sub" id="updated">Loading…</div>
+
+  <div class="cards">
+    <div class="card"><div class="k">Today</div><div class="v" id="t-today">—</div></div>
+    <div class="card"><div class="k">This week</div><div class="v" id="t-week">—</div></div>
+    <div class="card"><div class="k">This month</div><div class="v" id="t-month">—</div></div>
+    <div class="card"><div class="k">Since start</div><div class="v" id="t-all">—</div></div>
+  </div>
+
+  <h2>Today</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Strategy</th><th>Status</th><th class="num">P&amp;L</th><th>Details</th></tr></thead>
+    <tbody id="today"></tbody>
+  </table></div>
+
+  <h2>Total by strategy</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Strategy</th><th class="num">Since start</th><th class="num">Winning days</th></tr></thead>
+    <tbody id="per"></tbody>
+  </table></div>
+
+  <h2>Daily history</h2>
+  <div class="table-wrap"><table>
+    <thead id="hist-head"></thead>
+    <tbody id="hist"></tbody>
+  </table></div>
+
+  <div class="foot">Paper results: every signal at 1 lot (65 qty), estimated option prices, before charges. Alerts only, no orders are placed. Page refreshes every minute.</div>
+</main>
+<script>
+const NAMES = {
+  hedged_selling: 'Iron Butterfly', nifty_10_12_put: '10:12 Put', nifty_gap_drive: 'Gap Drive',
+  nifty_1pm_drop: '1 PM Drop', option_buying: 'Long Straddle', short_straddle: 'Short Straddle'
+};
+const STATUS = { WAITING: '⏳ Waiting', OPEN: '🔔 In trade', REENTRY_WAIT: '🔁 Re-entry soon', CLOSED: '✅ Closed', SKIPPED: '— No trade' };
+
+function money(v) {
+  if (v === null || v === undefined) return '—';
+  const s = (v < 0 ? '−' : '+') + '₹' + Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  return `<span class="${v < 0 ? 'neg' : v > 0 ? 'pos' : ''}">${s}</span>`;
+}
+function esc(t) { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; }
+
+async function getJSON(path) {
+  const r = await fetch(`${path}?t=${Date.now()}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error(path);
+  return r.json();
+}
+
+async function load() {
+  let status = null, hist = [];
+  try { status = await getJSON('data/status.json'); } catch (e) {}
+  try { hist = await getJSON('data/history.json'); } catch (e) {}
+
+  const todayIso = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);  // IST date
+  const isToday = status && status.date === todayIso;
+  document.getElementById('updated').textContent = status
+    ? `Last update ${status.updated_at}${isToday ? '' : ' • no scan today yet'}`
+    : 'No data yet: the first scan runs on the next market day.';
+
+  const rows = (status && status.strategies) || [];
+  const todayTotal = isToday ? rows.reduce((a, r) => a + (r.pnl || 0), 0) : null;
+  const t = (status && status.totals) || {};
+  document.getElementById('t-today').innerHTML = money(todayTotal);
+  document.getElementById('t-week').innerHTML = money(t.week ?? null);
+  document.getElementById('t-month').innerHTML = money(t.month ?? null);
+  document.getElementById('t-all').innerHTML = money(t.all ?? null);
+
+  document.getElementById('today').innerHTML = rows.length && isToday ? rows.map((r) => {
+    const legs = r.open_trade ? r.open_trade.legs.map((l) => `${l.side} ${esc(l.symbol)} @ ₹${l.entry} → ₹${l.cur}${l.sl ? ` (SL ₹${l.sl})` : ''}`).join('<br>') : '';
+    return `<tr><td>${esc(r.name)}</td><td><span class="chip">${STATUS[r.status] || esc(r.status)}</span></td>
+      <td class="num">${r.status === 'WAITING' || r.status === 'SKIPPED' ? '—' : money(r.pnl)}</td>
+      <td class="note">${esc(r.note)}${legs ? `<div class="legs">${legs}</div>` : ''}</td></tr>`;
+  }).join('') : '<tr><td colspan="4" class="empty">No scan today yet. Runs Mon–Fri from 9:16 AM IST.</td></tr>';
+
+  const ids = Object.keys(NAMES);
+  document.getElementById('per').innerHTML = hist.length ? ids.map((id) => {
+    const days = hist.filter((h) => h.strategies[id] && h.strategies[id].status !== 'SKIPPED' && h.strategies[id].status !== 'WAITING');
+    const wins = days.filter((h) => h.strategies[id].pnl > 0).length;
+    const total = hist.reduce((a, h) => a + ((h.strategies[id] || {}).pnl || 0), 0);
+    return `<tr><td>${NAMES[id]}</td><td class="num">${money(total)}</td><td class="num">${days.length ? `${wins} / ${days.length}` : '—'}</td></tr>`;
+  }).join('') : '<tr><td colspan="3" class="empty">History starts after the first full market day.</td></tr>';
+
+  document.getElementById('hist-head').innerHTML = `<tr><th>Date</th>${ids.map((id) => `<th class="num">${NAMES[id]}</th>`).join('')}<th class="num">Total</th></tr>`;
+  document.getElementById('hist').innerHTML = hist.length ? hist.slice().reverse().map((h) =>
+    `<tr><td>${h.date}</td>${ids.map((id) => {
+      const s = h.strategies[id];
+      return `<td class="num">${!s ? '' : (s.status === 'SKIPPED' ? '<span class="note">no trade</span>' : money(s.pnl))}</td>`;
+    }).join('')}<td class="num"><b>${money(h.total)}</b></td></tr>`
+  ).join('') : `<tr><td colspan="${ids.length + 2}" class="empty">No days recorded yet.</td></tr>`;
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
