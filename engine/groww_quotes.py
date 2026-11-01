@@ -13,7 +13,9 @@ scanner falls back to its Black-Scholes estimate.
 from __future__ import annotations
 
 import logging
+import re
 import time
+from urllib.parse import parse_qs, urlparse
 from datetime import date
 from typing import Any, Dict, Optional, Tuple
 
@@ -22,6 +24,19 @@ logger = logging.getLogger("GrowwQuotes")
 REFRESH_SECONDS = 20
 TOKEN_MAX_AGE = 4 * 3600   # Groww tokens expire daily at 6 AM; refresh well before
 RETRY_LOGIN_AFTER = 300    # after a failed login, wait before trying again
+
+
+def _clean_totp_secret(value: str) -> str:
+    """Accept the bare base32 secret, a full otpauth:// link from the QR code, or the secret
+    with spaces/dashes/lowercase."""
+    value = (value or "").strip()
+    if value.lower().startswith("otpauth://"):
+        value = (parse_qs(urlparse(value).query).get("secret") or [""])[0]
+    return re.sub(r"[\s-]", "", value).upper().rstrip("=")
+
+
+def _looks_like_jwt(value: str) -> bool:
+    return value.count(".") == 2 and len(value) > 100
 
 
 def _num(v: Any) -> float:
@@ -35,7 +50,10 @@ class GrowwQuotes:
     def __init__(self, api_key: str, secret: str = "", totp_secret: str = ""):
         self.api_key = (api_key or "").strip()
         self.secret = (secret or "").strip()
-        self.totp_secret = (totp_secret or "").replace(" ", "").strip()
+        totp_secret = (totp_secret or "").strip()
+        if _looks_like_jwt(totp_secret) and not _looks_like_jwt(self.api_key):
+            self.api_key, totp_secret = totp_secret, self.api_key  # the two values were swapped
+        self.totp_secret = _clean_totp_secret(totp_secret)
         self.client = None
         self.token_at = 0.0
         self.failed_at = 0.0
@@ -59,6 +77,11 @@ class GrowwQuotes:
             if self.totp_secret:
                 import pyotp
 
+                if not re.fullmatch(r"[A-Z2-7]+", self.totp_secret):
+                    raise ValueError(
+                        f"TOTP secret is not valid ({len(self.totp_secret)} chars, has characters other than A–Z / 2–7). "
+                        "Copy the text code shown under Groww's QR code (not the TOTP token / API key)"
+                    )
                 token = GrowwAPI.get_access_token(api_key=self.api_key, totp=pyotp.TOTP(self.totp_secret).now())
             else:
                 token = GrowwAPI.get_access_token(api_key=self.api_key, secret=self.secret)
