@@ -283,7 +283,7 @@ class SignalScanner:
                 return
             if self._too_late(now, dtime(10, 0)):
                 return self._skip(st, "Missed: scanner started after 10:15")
-            return self._enter(sid, st, now, spot, iv, "10:00 AM entry (trades every day)")
+            return self._enter(sid, st, now, spot, iv, "Daily 10 AM entry")
 
         if sid == "nifty_gap_drive":
             if t < dtime(9, 45):
@@ -382,7 +382,7 @@ class SignalScanner:
         else:
             hit = next((l for l in trade["legs"] if l.get("sl") and l["side"] == "SELL" and l["cur"] >= l["sl"]), None)
             if hit:
-                reason = f"🛑 Stop-loss hit on SELL {hit['symbol']} (₹{hit['cur']:,.2f} ≥ ₹{hit['sl']:,.2f})"
+                reason = f"🛑 Stop-loss hit on {hit['strike']} {hit['opt']} (₹{hit['cur']:,.2f} ≥ ₹{hit['sl']:,.2f})"
             elif pnl >= trade["target"]:
                 reason = f"🎯 Profit guard hit ({_rupees(pnl)} ≥ +₹{trade['target']:,.0f})"
             elif pnl <= trade["stop"]:
@@ -408,41 +408,48 @@ class SignalScanner:
     # ---------- message text ----------
 
     def _entry_text(self, sid, trade, now, iv, reentry) -> str:
-        name = get_strategy(sid)["name"]
-        head = "🔁 RE-ENTRY" if reentry else "🔔 SIGNAL"
-        lines = [f"{head}: <b>{tg.esc(name)}</b>", f"Why: {tg.esc(trade['why'])}", ""]
+        """Short, phone-friendly 'what to buy' alert."""
         legs = sorted(trade["legs"], key=lambda l: l["side"] != "BUY")  # hedges (buys) first
-        for i, l in enumerate(legs, 1):
-            icon = "🟢" if l["side"] == "BUY" else "🔴"
-            lines.append(f"{i}. {icon} <b>{l['side']}</b> <code>{tg.esc(l['symbol'])}</code> × {l['qty']} @ ~₹{l['entry']:,.2f}")
-            if l["side"] == "SELL" and l.get("sl"):
-                lines.append(f"    SL: buy back if ≥ ₹{l['sl']:,.2f}")
-            elif l.get("target"):
-                trail = f" • then trail {int(trade['trail'] * 100)}% below the high" if trade.get("trail") else ""
-                lines.append(f"    SL ₹{l['sl']:,.2f} • Target ₹{l['target']:,.2f}{trail}")
-        lines.append("")
-        if trade["kind"] == "seller":
-            lines.append(f"• Any SL hit → close ALL legs. Guard: exit all at +₹{trade['target']:,.0f} / −₹{abs(trade['stop']):,.0f}.")
-            lines.append("• Place the BUY hedges before the SELLs." if len(legs) > 2 else "• ⚠️ Naked sell: unlimited risk, ~₹1.6L+ margin per leg.")
-        elif trade["kind"] == "guard":
-            lines.append(f"• No leg SL. Guard: exit both at +₹{trade['target']:,.0f} / −₹{abs(trade['stop']):,.0f}.")
-            cost = sum(l["entry"] * l["qty"] for l in legs)
-            lines.append(f"• Cost ≈ ₹{cost:,.0f} (max loss).")
-        else:
+        expiry = nifty_weekly_expiry(now.date()).strftime("%d %b")
+        exit_at = datetime.strptime(trade["exit"], "%H:%M").strftime("%-I:%M %p")
+        tag = "🔁 RE-ENTRY" if reentry else "🔔"
+
+        if trade["kind"] == "buyer":
             l = legs[0]
-            lines.append(f"• Cost ≈ ₹{l['entry'] * l['qty']:,.0f} • risk ≈ ₹{(l['entry'] - l['sl']) * l['qty']:,.0f} • reward ≈ ₹{(l['target'] - l['entry']) * l['qty']:,.0f}")
-        lines.append(f"• Exit by {datetime.strptime(trade['exit'], '%H:%M').strftime('%-I:%M %p')} if nothing hits.")
-        lines.append("")
-        lines.append(f"<i>NIFTY {trade['spot']:,.2f} • prices are estimates (VIX {iv * 100:.1f}): check the real premium and recompute SL/target from your fill. {now.strftime('%d %b %H:%M')}</i>")
+            what = "BUY CALL" if l["opt"] == "CE" else "BUY PUT"
+            lines = [f"{tag} <b>{what}</b> · {SHORT_NAMES[sid]}", "",
+                     f"🟢 <b>NIFTY {l['strike']} {l['opt']}</b>",
+                     f"Expiry {expiry} · Qty {l['qty']}",
+                     f"Buy at ~₹{l['entry']:,.0f}", "",
+                     f"🛑 Stop-loss  ₹{l['sl']:,.0f}",
+                     f"🎯 Target  ₹{l['target']:,.0f}"]
+            if trade.get("trail"):
+                lines.append(f"📈 After it rises, trail SL {int(trade['trail'] * 100)}% below the high")
+        else:
+            lines = [f"{tag} <b>{SHORT_NAMES[sid].upper()}</b> · {len(legs)} legs",
+                     f"Expiry {expiry} · Qty {legs[0]['qty']} each", ""]
+            for i, l in enumerate(legs, 1):
+                icon, side = ("🟢", "BUY ") if l["side"] == "BUY" else ("🔴", "SELL")
+                sl = f" · SL ₹{l['sl']:,.0f}" if l.get("sl") else ""
+                lines.append(f"{i}. {icon} {side} <b>{l['strike']} {l['opt']}</b>  ~₹{l['entry']:,.0f}{sl}")
+            lines.append("")
+            if trade["kind"] == "seller":
+                lines.append("🛑 Any SL hit → exit all legs")
+            lines.append(f"🎯 Exit all at +₹{trade['target']:,.0f} / −₹{abs(trade['stop']):,.0f}")
+            if sid == "short_straddle":
+                lines.append("⚠️ No hedge: needs ~₹1.6L+ margin per leg")
+        lines += [f"⏰ Exit by {exit_at}", "",
+                  f"<i>{tg.esc(trade['why'])} · NIFTY {trade['spot']:,.0f} · ~ = estimated price</i>"]
         return "\n".join(lines)
 
     def _exit_text(self, sid, trade, reason, pnl, day_pnl, next_step, now) -> str:
-        lines = [f"{reason.split(' ', 1)[0]} EXIT: <b>{tg.esc(SHORT_NAMES[sid])}</b>", tg.esc(reason.split(" ", 1)[1]), ""]
-        for l in trade["legs"]:
+        icon, text = reason.split(" ", 1)
+        lines = [f"{icon} <b>EXIT NOW</b> · {SHORT_NAMES[sid]}", tg.esc(text.split(" (")[0]), ""]
+        for l in sorted(trade["legs"], key=lambda l: l["side"] == "BUY"):  # buy back sells before selling hedges
             action = "SELL" if l["side"] == "BUY" else "BUY back"
-            lines.append(f"• {action} <code>{tg.esc(l['symbol'])}</code> @ ~₹{l['cur']:,.2f} (entry ₹{l['entry']:,.2f})")
-        lines += ["", f"Est. P&L: <b>{_rupees(pnl)}</b>" + (f" • strategy today {_rupees(day_pnl)}" if day_pnl != pnl else ""),
-                  next_step, f"<i>{now.strftime('%d %b %H:%M')}</i>"]
+            lines.append(f"{action} <b>NIFTY {l['strike']} {l['opt']}</b>  ~₹{l['cur']:,.0f}")
+        lines += ["", f"P&L <b>{_rupees(pnl)}</b>" + (f" · today {_rupees(day_pnl)}" if day_pnl != pnl else ""),
+                  f"<i>{next_step}</i>"]
         return "\n".join(lines)
 
     def _summary(self, now, spot) -> str:
@@ -498,8 +505,8 @@ class SignalScanner:
         leg = self._leg(now, spot, iv, get_atm_strike(spot), "PE", "BUY", 0.30)
         leg["target"] = round(leg["entry"] * 1.60, 2)
         trade = {"kind": "buyer", "legs": [leg], "trail": 0.15, "exit": "15:20", "spot": spot,
-                 "why": "SAMPLE ONLY, not a real signal: 10:05 candle red and below range mid 23,070"}
-        return "🧪 <b>SAMPLE</b>\n" + self._entry_text("nifty_10_12_put", trade, now, iv, False)
+                 "why": "Weak morning: 10:05 candle red"}
+        return "🧪 <i>Sample only, not a real signal</i>\n\n" + self._entry_text("nifty_10_12_put", trade, now, iv, False)
 
     def get_status(self) -> Dict[str, Any]:
         rows = []
