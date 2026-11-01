@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1a33"/>
+      <stop offset="1" stop-color="#0d4a52"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0" stop-color="#2dd4bf" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#f4a024"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="640" fill="url(#bg)"/>
+  <rect width="640" height="640" fill="url(#glow)"/>
+  <g transform="translate(0 35)">
+  <!-- faint grid -->
+  <g stroke="#ffffff" stroke-opacity="0.06" stroke-width="2">
+    <line x1="120" y1="200" x2="520" y2="200"/><line x1="120" y1="290" x2="520" y2="290"/>
+    <line x1="120" y1="380" x2="520" y2="380"/><line x1="120" y1="470" x2="520" y2="470"/>
+  </g>
+  <!-- candlesticks: wick + body -->
+  <g stroke-linecap="round">
+    <line x1="170" y1="390" x2="170" y2="500" stroke="#ef5350" stroke-width="8"/>
+    <rect x="148" y="410" width="44" height="66" rx="8" fill="#ef5350"/>
+    <line x1="245" y1="330" x2="245" y2="470" stroke="#26c281" stroke-width="8"/>
+    <rect x="223" y="355" width="44" height="90" rx="8" fill="#26c281"/>
+    <line x1="320" y1="350" x2="320" y2="440" stroke="#ef5350" stroke-width="8"/>
+    <rect x="298" y="368" width="44" height="52" rx="8" fill="#ef5350"/>
+    <line x1="395" y1="250" x2="395" y2="420" stroke="#26c281" stroke-width="8"/>
+    <rect x="373" y="275" width="44" height="115" rx="8" fill="#26c281"/>
+    <line x1="470" y1="190" x2="470" y2="360" stroke="#26c281" stroke-width="8"/>
+    <rect x="448" y="212" width="44" height="118" rx="8" fill="#26c281"/>
+  </g>
+  <!-- trend line -->
+  <polyline points="150,440 245,395 320,400 395,320 480,235" fill="none" stroke="#7dd3fc" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" stroke-opacity="0.9"/>
+  <!-- bell -->
+  <g transform="translate(210 105)">
+    <path d="M60 18 C60 8 68 0 78 0 C88 0 96 8 96 18 L96 22 C124 32 140 58 140 90 L140 132 L156 156 L0 156 L16 132 L16 90 C16 58 32 32 60 22 Z" fill="url(#bell)" transform="translate(0 0) scale(0.92)"/>
+    <circle cx="71.8" cy="158" r="17" fill="#f4a024"/>
+    <circle cx="136" cy="18" r="22" fill="#ef5350" stroke="#0b1a33" stroke-width="6"/>
+  </g>
+  </g>
+</svg>

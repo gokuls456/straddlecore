@@ -7,8 +7,8 @@ and alerts on stop-loss / target / trailing / guard / time exits. A summary of a
 strategies goes out after the close.
 
 Market data: NIFTY 5-minute candles and India VIX from Yahoo Finance (free, may lag a
-little). Option premiums are Black-Scholes estimates using India VIX as volatility, so
-the real price in your broker app will differ: recompute SL/target from your actual fill.
+little). Option premiums are live Groww quotes when Groww API keys are configured
+(see groww_quotes.py), otherwise Black-Scholes estimates using India VIX as volatility.
 
 Entry rules follow the backtest code in strategy_registry.py / straddle_engine.py.
 """
@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from engine import telegram_notifier as tg
+from engine.groww_quotes import GrowwQuotes
 from engine.expiry import nifty_weekly_expiry, trading_days_until
 from engine.straddle_engine import bs_call_price, bs_put_price, get_atm_strike
 from engine.strategy_registry import get_strategy
@@ -112,6 +113,8 @@ class SignalScanner:
         self.state_file = state_file
         self.history_file = history_file
         self.config_loader = config_loader  # GitHub runner supplies settings from signals_config.json
+        self._quotes: Optional[GrowwQuotes] = None
+        self._quotes_key: Tuple[str, str, str] = ("", "", "")
         self.thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
         self.last_error = ""
@@ -164,6 +167,24 @@ class SignalScanner:
 
     # ---------- pricing ----------
 
+    def quotes(self) -> Optional[GrowwQuotes]:
+        """Groww live-quote client from the configured keys (rebuilt if the keys change)."""
+        g = self._config().get("groww") or {}
+        key = (g.get("api_key") or "", g.get("api_secret") or "", g.get("totp_secret") or "")
+        if not key[0] or not (key[1] or key[2]):
+            self._quotes = None
+        elif key != self._quotes_key or self._quotes is None:
+            self._quotes = GrowwQuotes(*key)
+        self._quotes_key = key
+        return self._quotes
+
+    def _live_price(self, now: datetime, strike: int, opt_type: str) -> Optional[float]:
+        q = self.quotes()
+        if not q:
+            return None
+        px = q.price(nifty_weekly_expiry(now.date()), strike, opt_type)
+        return round(px, 2) if px else None
+
     def _premium(self, now: datetime, spot: float, strike: int, opt_type: str, iv: float) -> float:
         expiry = nifty_weekly_expiry(now.date())
         mins_left = max(0, (15 * 60 + 30) - (now.hour * 60 + now.minute))
@@ -177,12 +198,13 @@ class SignalScanner:
         return f"NIFTY {expiry.strftime('%d %b').upper()} {strike} {opt_type}"
 
     def _leg(self, now, spot, iv, strike, opt_type, side, sl_pct=None) -> Dict[str, Any]:
-        px = self._premium(now, spot, strike, opt_type, iv)
+        live = self._live_price(now, strike, opt_type)
+        px = live or self._premium(now, spot, strike, opt_type, iv)
         sl = None
         if sl_pct:
             sl = round(px * (1 + sl_pct) if side == "SELL" else px * (1 - sl_pct), 2)
         return {"symbol": self._symbol(now, strike, opt_type), "strike": strike, "opt": opt_type, "side": side,
-                "qty": LOT_SIZE, "entry": px, "cur": px, "high": px, "sl": sl}
+                "qty": LOT_SIZE, "entry": px, "cur": px, "high": px, "sl": sl, "live": bool(live)}
 
     # ---------- main loop ----------
 
@@ -363,7 +385,13 @@ class SignalScanner:
     def _manage(self, sid, st, now, spot, iv):
         trade = st["trade"]
         for l in trade["legs"]:
-            l["cur"] = self._premium(now, spot, l["strike"], l["opt"], iv)
+            live = self._live_price(now, l["strike"], l["opt"])
+            if live:
+                l["cur"] = live
+            elif not l.get("live"):
+                l["cur"] = self._premium(now, spot, l["strike"], l["opt"], iv)
+            # A leg priced from Groww keeps its last real price through a brief quote outage
+            # rather than jumping to the estimate.
             l["high"] = max(l.get("high", l["cur"]), l["cur"])
         pnl = self._trade_pnl(trade)
         reason = None
@@ -413,6 +441,8 @@ class SignalScanner:
         expiry = nifty_weekly_expiry(now.date()).strftime("%d %b")
         exit_at = datetime.strptime(trade["exit"], "%H:%M").strftime("%-I:%M %p")
         tag = "🔁 RE-ENTRY" if reentry else "🔔"
+        live = all(l.get("live") for l in legs)  # otherwise prices are estimates, marked "~"
+        rs = (lambda v: f"₹{v:,.2f}") if live else (lambda v: f"₹{v:,.0f}")
 
         if trade["kind"] == "buyer":
             l = legs[0]
@@ -420,9 +450,9 @@ class SignalScanner:
             lines = [f"{tag} <b>{what}</b> · {SHORT_NAMES[sid]}", "",
                      f"🟢 <b>NIFTY {l['strike']} {l['opt']}</b>",
                      f"Expiry {expiry} · Qty {l['qty']}",
-                     f"Buy at ~₹{l['entry']:,.0f}", "",
-                     f"🛑 Stop-loss  ₹{l['sl']:,.0f}",
-                     f"🎯 Target  ₹{l['target']:,.0f}"]
+                     f"Buy at ₹{l['entry']:,.2f}" if live else f"Buy at ~₹{l['entry']:,.0f}", "",
+                     f"🛑 Stop-loss  {rs(l['sl'])}",
+                     f"🎯 Target  {rs(l['target'])}"]
             if trade.get("trail"):
                 lines.append(f"📈 After it rises, trail SL {int(trade['trail'] * 100)}% below the high")
         else:
@@ -430,8 +460,9 @@ class SignalScanner:
                      f"Expiry {expiry} · Qty {legs[0]['qty']} each", ""]
             for i, l in enumerate(legs, 1):
                 icon, side = ("🟢", "BUY ") if l["side"] == "BUY" else ("🔴", "SELL")
-                sl = f" · SL ₹{l['sl']:,.0f}" if l.get("sl") else ""
-                lines.append(f"{i}. {icon} {side} <b>{l['strike']} {l['opt']}</b>  ~₹{l['entry']:,.0f}{sl}")
+                sl = f" · SL {rs(l['sl'])}" if l.get("sl") else ""
+                px = f"₹{l['entry']:,.2f}" if live else f"~₹{l['entry']:,.0f}"
+                lines.append(f"{i}. {icon} {side} <b>{l['strike']} {l['opt']}</b>  {px}{sl}")
             lines.append("")
             if trade["kind"] == "seller":
                 lines.append("🛑 Any SL hit → exit all legs")
@@ -439,7 +470,8 @@ class SignalScanner:
             if sid == "short_straddle":
                 lines.append("⚠️ No hedge: needs ~₹1.6L+ margin per leg")
         lines += [f"⏰ Exit by {exit_at}", "",
-                  f"<i>{tg.esc(trade['why'])} · NIFTY {trade['spot']:,.0f} · ~ = estimated price</i>"]
+                  f"<i>{tg.esc(trade['why'])} · NIFTY {trade['spot']:,.0f} · "
+                  f"{'Groww live prices' if live else '~ = estimated price'}</i>"]
         return "\n".join(lines)
 
     def _exit_text(self, sid, trade, reason, pnl, day_pnl, next_step, now) -> str:
@@ -447,7 +479,8 @@ class SignalScanner:
         lines = [f"{icon} <b>EXIT NOW</b> · {SHORT_NAMES[sid]}", tg.esc(text.split(" (")[0]), ""]
         for l in sorted(trade["legs"], key=lambda l: l["side"] == "BUY"):  # buy back sells before selling hedges
             action = "SELL" if l["side"] == "BUY" else "BUY back"
-            lines.append(f"{action} <b>NIFTY {l['strike']} {l['opt']}</b>  ~₹{l['cur']:,.0f}")
+            px = f"₹{l['cur']:,.2f}" if l.get("live") else f"~₹{l['cur']:,.0f}"
+            lines.append(f"{action} <b>NIFTY {l['strike']} {l['opt']}</b>  {px}")
         lines += ["", f"P&L <b>{_rupees(pnl)}</b>" + (f" · today {_rupees(day_pnl)}" if day_pnl != pnl else ""),
                   f"<i>{next_step}</i>"]
         return "\n".join(lines)
@@ -518,7 +551,10 @@ class SignalScanner:
             rows.append({"id": sid, "name": SHORT_NAMES[sid], "status": st["status"] if st else "—",
                          "note": st["note"] if st else "", "pnl": round(pnl, 2),
                          "open_trade": st.get("trade") if st and st["status"] == "OPEN" else None})
+        q = self.quotes()
+        price_source = "Groww live" if q and q._chain else ("Groww (not connected yet)" if q else "Estimated (no Groww keys)")
         return {"settings": self.settings(), "date": self.state.get("date"), "last_tick": self.last_tick,
+                "price_source": price_source, "quotes_error": q.last_error if q else "",
                 "last_error": self.last_error, "running": bool(self.thread and self.thread.is_alive()), "strategies": rows}
 
 

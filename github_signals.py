@@ -46,6 +46,12 @@ def load_settings() -> dict:
     return {
         "signals": {"enabled": s.get("enabled", True), "strategies": s.get("strategies", ALL_STRATEGIES)},
         "allocated_capital": s.get("capital", 40000),
+        # Optional live option prices (GitHub secrets); without them prices are estimates.
+        "groww": {
+            "api_key": os.environ.get("GROWW_API_KEY", ""),
+            "api_secret": os.environ.get("GROWW_API_SECRET", ""),
+            "totp_secret": os.environ.get("GROWW_TOTP_SECRET", ""),
+        },
     }
 
 
@@ -64,6 +70,33 @@ def commit_data(message: str):
     # Pull first so settings edited from the phone mid-day are kept (and picked up).
     if not (git("pull", "--rebase", "--autostash") and git("push")):
         log.warning("Push failed; will retry at the next commit.")
+
+
+def price_check(scanner: SignalScanner) -> str:
+    """One line saying whether live Groww option prices work from here."""
+    q = scanner.quotes()
+    if not q:
+        return "💲 Prices: estimated (no Groww keys added)"
+    now = now_ist()
+    spot = 0.0
+    try:
+        candles, _, _ = scanner.data_source(now)
+        spot = float(candles["close"].iloc[-1]) if not candles.empty else 0.0
+    except Exception:
+        pass
+    if not spot:
+        try:
+            import yfinance as yf
+            spot = float(yf.Ticker("^NSEI").history(period="5d")["Close"].iloc[-1])
+        except Exception:
+            spot = 23000.0
+    from engine.straddle_engine import get_atm_strike
+    atm = get_atm_strike(spot)
+    px = scanner._live_price(now, atm, "CE")
+    if px:
+        return f"💲 Prices: Groww live ✅ (NIFTY {atm} CE ₹{px:,.2f})"
+    log.warning("Groww quote check failed: %s", q.last_error)
+    return f"💲 Prices: estimated ⚠️ Groww: {tg.esc(q.last_error or 'no price returned')}"
 
 
 def write_status(scanner: SignalScanner, now: datetime):
@@ -96,8 +129,10 @@ def main():
     if args.test:
         if not (token and chat):
             sys.exit("Test failed: add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID under Settings → Secrets and variables → Actions.")
-        sample = SignalScanner(sender=send, config_loader=load_settings).sample_text()
-        ok, err = tg.send_message(token, chat, "✅ <b>GitHub Actions connected</b>\nWeekday scans will send alerts here. Sample format:\n\n" + sample)
+        scanner = SignalScanner(sender=send, config_loader=load_settings)
+        sample = scanner.sample_text()
+        ok, err = tg.send_message(token, chat, "✅ <b>GitHub Actions connected</b>\n" + price_check(scanner)
+                                  + "\nWeekday scans will send alerts here. Sample format:\n\n" + sample)
         if not ok:
             sys.exit(f"Test failed: Telegram said: {err}")
         log.info("Test alert sent.")
