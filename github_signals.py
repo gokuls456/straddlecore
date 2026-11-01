@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime, timedelta
 from datetime import time as dtime
@@ -76,6 +77,7 @@ def write_status(scanner: SignalScanner, now: datetime):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--until", default="15:40", help="IST time to stop, HH:MM")
+    parser.add_argument("--test", action="store_true", help="send one test alert and exit (works any time)")
     args = parser.parse_args()
     until = dtime.fromisoformat(args.until)
 
@@ -90,6 +92,16 @@ def main():
         ok, err = tg.send_message(token, chat, text)
         if not ok:
             log.warning("Telegram send failed: %s", err)
+
+    if args.test:
+        if not (token and chat):
+            sys.exit("Test failed: add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID under Settings → Secrets and variables → Actions.")
+        sample = SignalScanner(sender=send, config_loader=load_settings).sample_text()
+        ok, err = tg.send_message(token, chat, "✅ <b>GitHub Actions connected</b>\nWeekday scans will send alerts here. Sample format:\n\n" + sample)
+        if not ok:
+            sys.exit(f"Test failed: Telegram said: {err}")
+        log.info("Test alert sent.")
+        return
 
     os.makedirs(DATA_DIR, exist_ok=True)
     scanner = SignalScanner(

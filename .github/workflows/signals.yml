@@ -13,6 +13,10 @@ on:
       until:
         description: "Stop at (IST, HH:MM)"
         default: "15:40"
+      test:
+        description: "Only send one test alert to Telegram"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -41,6 +45,10 @@ jobs:
         run: |
           git config user.name "signals-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "${{ inputs.test }}" = "true" ]; then
+            python github_signals.py --test
+            exit 0
+          fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             UNTIL="${{ inputs.until }}"
           elif [ "${{ github.event.schedule }}" = "20 3 * * 1-5" ]; then
