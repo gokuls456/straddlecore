@@ -5,73 +5,15 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "OPEN",
-      "note": "Re-entry 15 min after stop-loss",
-      "trade": {
-        "kind": "seller",
-        "legs": [
-          {
-            "symbol": "NIFTY 03 NOV 23550 CE",
-            "strike": 23550,
-            "opt": "CE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 9.1,
-            "cur": 9.1,
-            "high": 10.05,
-            "sl": null,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 03 NOV 22950 PE",
-            "strike": 22950,
-            "opt": "PE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 18.25,
-            "cur": 9.7,
-            "high": 22.05,
-            "sl": null,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 03 NOV 23250 CE",
-            "strike": 23250,
-            "opt": "CE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 73.45,
-            "cur": 93.05,
-            "high": 94.1,
-            "sl": 102.83,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 03 NOV 23250 PE",
-            "strike": 23250,
-            "opt": "PE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 104.2,
-            "cur": 65.5,
-            "high": 124.15,
-            "sl": 145.88,
-            "live": true
-          }
-        ],
-        "target": 4000,
-        "stop": -4000,
-        "exit": "15:25",
-        "reentry": true,
-        "why": "Re-entry 15 min after stop-loss",
-        "entry_time": "13:32",
-        "spot": 23242.94921875
-      },
-      "pnl": -266.5,
+      "status": "CLOSED",
+      "note": "Stop-loss hit on 23250 CE",
+      "trade": null,
+      "pnl": 169.0,
       "events": [
         "10:00 Entry @ NIFTY 23,310",
         "13:16 Exit \u2212\u20b9266",
-        "13:32 Re-entry @ NIFTY 23,243"
+        "13:32 Re-entry @ NIFTY 23,243",
+        "14:36 Exit +\u20b9436"
       ],
       "reentry_at": "2026-11-02T13:31:49.692301"
     },
@@ -115,7 +57,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 96.85,
-            "cur": 67.75,
+            "cur": 77.3,
             "high": 114.2,
             "sl": null,
             "live": true
@@ -127,7 +69,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 94.0,
-            "cur": 89.65,
+            "cur": 80.7,
             "high": 157.3,
             "sl": null,
             "live": true
@@ -146,49 +88,15 @@
       ]
     },
     "short_straddle": {
-      "status": "OPEN",
-      "note": "Re-entry 15 min after stop-loss",
-      "trade": {
-        "kind": "seller",
-        "legs": [
-          {
-            "symbol": "NIFTY 03 NOV 23250 CE",
-            "strike": 23250,
-            "opt": "CE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 73.45,
-            "cur": 93.05,
-            "high": 94.1,
-            "sl": 102.83,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 03 NOV 23250 PE",
-            "strike": 23250,
-            "opt": "PE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 104.2,
-            "cur": 65.5,
-            "high": 124.15,
-            "sl": 145.88,
-            "live": true
-          }
-        ],
-        "target": 1500,
-        "stop": -1500,
-        "exit": "15:25",
-        "reentry": true,
-        "why": "Re-entry 15 min after stop-loss",
-        "entry_time": "13:32",
-        "spot": 23242.94921875
-      },
-      "pnl": -617.5,
+      "status": "CLOSED",
+      "note": "Stop-loss hit on 23250 CE",
+      "trade": null,
+      "pnl": 302.25,
       "events": [
         "10:00 Entry @ NIFTY 23,310",
         "13:16 Exit \u2212\u20b9618",
-        "13:32 Re-entry @ NIFTY 23,243"
+        "13:32 Re-entry @ NIFTY 23,243",
+        "14:36 Exit +\u20b9920"
       ],
       "reentry_at": "2026-11-02T13:31:49.692301"
     },
