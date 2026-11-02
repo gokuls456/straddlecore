@@ -715,10 +715,20 @@ async function emergencySquareOffAll() {
     }
 }
 
+// The backtest toolbar picks what to backtest. While the algo is running it must not
+// touch the live strategy, so backtesting another strategy never prompts or switches it.
 function onQuickStrategySelect(val) {
-    selectLiveStrategy(val);
-    onStrategyModeChange(val);
+    if (!isAlgoActive) {
+        selectLiveStrategy(val);
+        onStrategyModeChange(val);
+    } else {
+        updateCapitalPreview();
+    }
     if (currentResults) runBacktest();
+}
+
+function backtestStrategyMode() {
+    return document.getElementById('bt-quick-strategy')?.value || currentStrategyMode;
 }
 
 function onQuickPeriodSelect() {
@@ -779,7 +789,7 @@ function updateCapitalPreview() {
     const sizingMode = document.querySelector('input[name="cfg-sizing-mode"]:checked')?.value || 'auto_capital';
     const lotsInput = document.getElementById('cfg-initial-lots');
     if (sizingMode === 'auto_capital' && lotsInput) {
-        lotsInput.value = Math.max(1, lotsFor(currentStrategyMode, capital));
+        lotsInput.value = Math.max(1, lotsFor(backtestStrategyMode(), capital));
     }
     updateBacktestSummaryPreview();
 }
@@ -1075,9 +1085,7 @@ let runningStrategyMode = null;
 function markRunningStrategy(mode) {
     runningStrategyMode = mode;
     if (mode && currentStrategyMode !== mode) {
-        currentStrategyMode = mode;
-        const quickSelect = document.getElementById('bt-quick-strategy');
-        if (quickSelect) quickSelect.value = mode;
+        currentStrategyMode = mode;  // the backtest toolbar keeps its own choice
     }
     document.querySelectorAll('.strategy-pick').forEach((el) => {
         const isRunning = Boolean(mode) && el.dataset.mode === mode;
