@@ -5,11 +5,72 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "WAITING",
-      "note": "",
-      "trade": null,
+      "status": "OPEN",
+      "note": "Daily 10 AM entry",
+      "trade": {
+        "kind": "seller",
+        "legs": [
+          {
+            "symbol": "NIFTY 03 NOV 23600 CE",
+            "strike": 23600,
+            "opt": "CE",
+            "side": "BUY",
+            "qty": 65,
+            "entry": 10.1,
+            "cur": 10.1,
+            "high": 10.1,
+            "sl": null,
+            "live": true
+          },
+          {
+            "symbol": "NIFTY 03 NOV 23000 PE",
+            "strike": 23000,
+            "opt": "PE",
+            "side": "BUY",
+            "qty": 65,
+            "entry": 20.6,
+            "cur": 20.6,
+            "high": 20.6,
+            "sl": null,
+            "live": true
+          },
+          {
+            "symbol": "NIFTY 03 NOV 23300 CE",
+            "strike": 23300,
+            "opt": "CE",
+            "side": "SELL",
+            "qty": 65,
+            "entry": 96.85,
+            "cur": 96.85,
+            "high": 96.85,
+            "sl": 116.22,
+            "live": true
+          },
+          {
+            "symbol": "NIFTY 03 NOV 23300 PE",
+            "strike": 23300,
+            "opt": "PE",
+            "side": "SELL",
+            "qty": 65,
+            "entry": 94.0,
+            "cur": 94.0,
+            "high": 94.0,
+            "sl": 112.8,
+            "live": true
+          }
+        ],
+        "target": 4000,
+        "stop": -4000,
+        "exit": "15:25",
+        "reentry": false,
+        "why": "Daily 10 AM entry",
+        "entry_time": "10:00",
+        "spot": 23310.19921875
+      },
       "pnl": 0.0,
-      "events": []
+      "events": [
+        "10:00 Entry @ NIFTY 23,310"
+      ]
     },
     "nifty_10_12_put": {
       "status": "WAITING",
@@ -31,7 +92,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 107.4,
-            "cur": 99.95,
+            "cur": 96.85,
             "high": 111.7,
             "sl": 80.55,
             "live": true,
@@ -57,18 +118,91 @@
       "events": []
     },
     "option_buying": {
-      "status": "WAITING",
-      "note": "",
-      "trade": null,
+      "status": "OPEN",
+      "note": "Daily 10 AM entry",
+      "trade": {
+        "kind": "guard",
+        "legs": [
+          {
+            "symbol": "NIFTY 03 NOV 23300 CE",
+            "strike": 23300,
+            "opt": "CE",
+            "side": "BUY",
+            "qty": 65,
+            "entry": 96.85,
+            "cur": 96.85,
+            "high": 96.85,
+            "sl": null,
+            "live": true
+          },
+          {
+            "symbol": "NIFTY 03 NOV 23300 PE",
+            "strike": 23300,
+            "opt": "PE",
+            "side": "BUY",
+            "qty": 65,
+            "entry": 94.0,
+            "cur": 94.0,
+            "high": 94.0,
+            "sl": null,
+            "live": true
+          }
+        ],
+        "target": 4000,
+        "stop": -4000,
+        "exit": "15:25",
+        "why": "Daily 10 AM entry",
+        "entry_time": "10:00",
+        "spot": 23310.19921875
+      },
       "pnl": 0.0,
-      "events": []
+      "events": [
+        "10:00 Entry @ NIFTY 23,310"
+      ]
     },
     "short_straddle": {
-      "status": "WAITING",
-      "note": "",
-      "trade": null,
+      "status": "OPEN",
+      "note": "Daily 10 AM entry",
+      "trade": {
+        "kind": "seller",
+        "legs": [
+          {
+            "symbol": "NIFTY 03 NOV 23300 CE",
+            "strike": 23300,
+            "opt": "CE",
+            "side": "SELL",
+            "qty": 65,
+            "entry": 96.85,
+            "cur": 96.85,
+            "high": 96.85,
+            "sl": 116.22,
+            "live": true
+          },
+          {
+            "symbol": "NIFTY 03 NOV 23300 PE",
+            "strike": 23300,
+            "opt": "PE",
+            "side": "SELL",
+            "qty": 65,
+            "entry": 94.0,
+            "cur": 94.0,
+            "high": 94.0,
+            "sl": 112.8,
+            "live": true
+          }
+        ],
+        "target": 1500,
+        "stop": -1500,
+        "exit": "15:25",
+        "reentry": false,
+        "why": "Daily 10 AM entry",
+        "entry_time": "10:00",
+        "spot": 23310.19921875
+      },
       "pnl": 0.0,
-      "events": []
+      "events": [
+        "10:00 Entry @ NIFTY 23,310"
+      ]
     }
   }
 }
