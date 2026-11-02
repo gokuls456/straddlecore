@@ -45,46 +45,13 @@
       ]
     },
     "option_buying": {
-      "status": "OPEN",
-      "note": "Daily 10 AM entry",
-      "trade": {
-        "kind": "guard",
-        "legs": [
-          {
-            "symbol": "NIFTY 03 NOV 23300 CE",
-            "strike": 23300,
-            "opt": "CE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 96.85,
-            "cur": 85.05,
-            "high": 114.2,
-            "sl": null,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 03 NOV 23300 PE",
-            "strike": 23300,
-            "opt": "PE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 94.0,
-            "cur": 69.75,
-            "high": 157.3,
-            "sl": null,
-            "live": true
-          }
-        ],
-        "target": 4000,
-        "stop": -4000,
-        "exit": "15:25",
-        "why": "Daily 10 AM entry",
-        "entry_time": "10:00",
-        "spot": 23310.19921875
-      },
-      "pnl": 0.0,
+      "status": "CLOSED",
+      "note": "Time exit",
+      "trade": null,
+      "pnl": -2538.25,
       "events": [
-        "10:00 Entry @ NIFTY 23,310"
+        "10:00 Entry @ NIFTY 23,310",
+        "15:25 Exit \u2212\u20b92,538"
       ]
     },
     "short_straddle": {
