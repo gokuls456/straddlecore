@@ -1,0 +1,43 @@
+[
+ {
+  "date": "2026-11-02",
+  "strategies": {
+   "hedged_selling": {
+    "pnl": 169.0,
+    "status": "CLOSED",
+    "note": "Stop-loss hit on 23250 CE"
+   },
+   "nifty_10_12_put": {
+    "pnl": 0.0,
+    "status": "SKIPPED",
+    "note": "No trade: 10:05 candle green and above range mid 23,271"
+   },
+   "nifty_gap_drive": {
+    "pnl": -1800.5,
+    "status": "CLOSED",
+    "note": "Stop-loss hit"
+   },
+   "nifty_1pm_drop": {
+    "pnl": 955.5,
+    "status": "CLOSED",
+    "note": "Trailing stop hit"
+   },
+   "option_buying": {
+    "pnl": -2538.25,
+    "status": "CLOSED",
+    "note": "Time exit"
+   },
+   "short_straddle": {
+    "pnl": 302.25,
+    "status": "CLOSED",
+    "note": "Stop-loss hit on 23250 CE"
+   },
+   "trend_hedged_straddle": {
+    "pnl": 0.0,
+    "status": "SKIPPED",
+    "note": "Missed: scanner started after 10:15"
+   }
+  },
+  "total": -2912.0
+ }
+]
