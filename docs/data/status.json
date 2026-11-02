@@ -11,7 +11,7 @@
   ]
  },
  "date": "2026-11-02",
- "last_tick": "11:47:24",
+ "last_tick": "11:57:39",
  "price_source": "INDstocks live",
  "quotes_error": "",
  "last_error": "",
@@ -22,7 +22,7 @@
    "name": "Iron Butterfly",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": 734.5,
+   "pnl": 656.5,
    "open_trade": {
     "kind": "seller",
     "legs": [
@@ -33,7 +33,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 10.1,
-      "cur": 6.9,
+      "cur": 7.25,
       "high": 11.2,
       "sl": null,
       "live": true
@@ -45,7 +45,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 20.6,
-      "cur": 18.85,
+      "cur": 19.35,
       "high": 22.35,
       "sl": null,
       "live": true
@@ -57,7 +57,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 96.85,
-      "cur": 79.7,
+      "cur": 79.65,
       "high": 112.15,
       "sl": 116.22,
       "live": true
@@ -69,7 +69,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 94.0,
-      "cur": 94.9,
+      "cur": 97.0,
       "high": 103.0,
       "sl": 112.8,
       "live": true
@@ -113,7 +113,7 @@
    "name": "Long Straddle",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": -1056.25,
+   "pnl": -923.0,
    "open_trade": {
     "kind": "guard",
     "legs": [
@@ -124,7 +124,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 96.85,
-      "cur": 79.7,
+      "cur": 79.65,
       "high": 112.15,
       "sl": null,
       "live": true
@@ -136,7 +136,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 94.0,
-      "cur": 94.9,
+      "cur": 97.0,
       "high": 103.0,
       "sl": null,
       "live": true
@@ -155,7 +155,7 @@
    "name": "Short Straddle",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": 1056.25,
+   "pnl": 923.0,
    "open_trade": {
     "kind": "seller",
     "legs": [
@@ -166,7 +166,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 96.85,
-      "cur": 79.7,
+      "cur": 79.65,
       "high": 112.15,
       "sl": 116.22,
       "live": true
@@ -178,7 +178,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 94.0,
-      "cur": 94.9,
+      "cur": 97.0,
       "high": 103.0,
       "sl": 112.8,
       "live": true
@@ -208,5 +208,5 @@
    "short_straddle": 0
   }
  },
- "updated_at": "2026-11-02 11:47:24 IST"
+ "updated_at": "2026-11-02 11:57:39 IST"
 }
