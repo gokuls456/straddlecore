@@ -12,7 +12,7 @@
   ]
  },
  "date": "2026-11-02",
- "last_tick": "13:20:28",
+ "last_tick": "13:30:41",
  "price_source": "INDstocks live",
  "quotes_error": "",
  "last_error": "",
@@ -47,7 +47,7 @@
    "name": "1 PM Drop",
    "status": "OPEN",
    "note": "4 of 7 candles red 12:45\u20131:15 PM",
-   "pnl": 0.0,
+   "pnl": 1157.0,
    "open_trade": {
     "kind": "buyer",
     "legs": [
@@ -58,8 +58,8 @@
       "side": "BUY",
       "qty": 65,
       "entry": 90.15,
-      "cur": 90.15,
-      "high": 90.15,
+      "cur": 107.95,
+      "high": 110.0,
       "sl": 63.1,
       "live": true,
       "target": 144.24
@@ -77,7 +77,7 @@
    "name": "Long Straddle",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": -611.0,
+   "pnl": -22.75,
    "open_trade": {
     "kind": "guard",
     "legs": [
@@ -88,7 +88,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 96.85,
-      "cur": 62.3,
+      "cur": 51.65,
       "high": 114.2,
       "sl": null,
       "live": true
@@ -100,7 +100,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 94.0,
-      "cur": 119.15,
+      "cur": 138.85,
       "high": 151.15,
       "sl": null,
       "live": true
@@ -146,5 +146,5 @@
    "trend_hedged_straddle": 0
   }
  },
- "updated_at": "2026-11-02 13:20:28 IST"
+ "updated_at": "2026-11-02 13:30:41 IST"
 }
