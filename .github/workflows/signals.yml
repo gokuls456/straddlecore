@@ -2,12 +2,18 @@ name: Strategy signals
 
 # Telegram alerts for all strategies, Mon–Fri. No orders are placed.
 # GitHub jobs are limited to 6 hours, so the market day is split into two runs.
-# Cron times are UTC (IST = UTC + 5:30) and GitHub may start them a few minutes late,
-# so each run starts early and the script waits for market hours.
+# Cron times are UTC (IST = UTC + 5:30). GitHub can start scheduled runs late or skip
+# them, so each half of the day has backup start times. Only one run is active at a time
+# (concurrency below); a duplicate that starts after its window simply exits.
 on:
   schedule:
-    - cron: "20 3 * * 1-5"   # 8:50 AM IST → morning run until 12:15 PM
-    - cron: "30 6 * * 1-5"   # 12:00 PM IST → queued behind the morning run, until 3:40 PM
+    - cron: "20 3 * * 1-5"   # 8:50 AM IST  morning run (until 12:15 PM)
+    - cron: "35 3 * * 1-5"   # 9:05 AM IST  backup
+    - cron: "50 3 * * 1-5"   # 9:20 AM IST  backup
+    - cron: "5 4 * * 1-5"    # 9:35 AM IST  backup
+    - cron: "30 6 * * 1-5"   # 12:00 PM IST afternoon run (until 3:40 PM), queued behind the morning run
+    - cron: "45 6 * * 1-5"   # 12:15 PM IST backup
+    - cron: "0 7 * * 1-5"    # 12:30 PM IST backup
   workflow_dispatch:
     inputs:
       until:
@@ -58,8 +64,8 @@ jobs:
           fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             UNTIL="${{ inputs.until }}"
-          elif [ "${{ github.event.schedule }}" = "20 3 * * 1-5" ]; then
-            UNTIL="12:15"
+          elif [ "$(date +%H%M)" -lt 1200 ]; then
+            UNTIL="12:15"   # morning run (TZ is Asia/Kolkata)
           else
             UNTIL="15:40"
           fi
