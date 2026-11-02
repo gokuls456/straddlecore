@@ -17,7 +17,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 10.1,
-            "cur": 7.8,
+            "cur": 6.9,
             "high": 11.2,
             "sl": null,
             "live": true
@@ -29,7 +29,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 20.6,
-            "cur": 17.35,
+            "cur": 18.85,
             "high": 22.35,
             "sl": null,
             "live": true
@@ -41,7 +41,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 96.85,
-            "cur": 86.65,
+            "cur": 79.7,
             "high": 112.15,
             "sl": 116.22,
             "live": true
@@ -53,7 +53,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 94.0,
-            "cur": 88.3,
+            "cur": 94.9,
             "high": 103.0,
             "sl": 112.8,
             "live": true
@@ -80,34 +80,13 @@
       "events": []
     },
     "nifty_gap_drive": {
-      "status": "OPEN",
-      "note": "Gap up +186 pts at open",
-      "trade": {
-        "kind": "buyer",
-        "legs": [
-          {
-            "symbol": "NIFTY 03 NOV 23300 CE",
-            "strike": 23300,
-            "opt": "CE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 107.4,
-            "cur": 86.65,
-            "high": 112.15,
-            "sl": 80.55,
-            "live": true,
-            "target": 161.1
-          }
-        ],
-        "trail": null,
-        "exit": "15:15",
-        "why": "Gap up +186 pts at open",
-        "entry_time": "09:47",
-        "spot": 23316.599609375
-      },
-      "pnl": 0.0,
+      "status": "CLOSED",
+      "note": "Stop-loss hit",
+      "trade": null,
+      "pnl": -1800.5,
       "events": [
-        "09:47 Entry @ NIFTY 23,317"
+        "09:47 Entry @ NIFTY 23,317",
+        "11:47 Exit \u2212\u20b91,800"
       ]
     },
     "nifty_1pm_drop": {
@@ -130,7 +109,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 96.85,
-            "cur": 86.65,
+            "cur": 79.7,
             "high": 112.15,
             "sl": null,
             "live": true
@@ -142,7 +121,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 94.0,
-            "cur": 88.3,
+            "cur": 94.9,
             "high": 103.0,
             "sl": null,
             "live": true
@@ -173,7 +152,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 96.85,
-            "cur": 86.65,
+            "cur": 79.7,
             "high": 112.15,
             "sl": 116.22,
             "live": true
@@ -185,7 +164,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 94.0,
-            "cur": 88.3,
+            "cur": 94.9,
             "high": 103.0,
             "sl": 112.8,
             "live": true
