@@ -17,7 +17,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 9.1,
-            "cur": 8.55,
+            "cur": 8.8,
             "high": 9.1,
             "sl": null,
             "live": true
@@ -29,7 +29,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 18.25,
-            "cur": 19.2,
+            "cur": 17.95,
             "high": 22.05,
             "sl": null,
             "live": true
@@ -41,7 +41,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 73.45,
-            "cur": 68.25,
+            "cur": 71.6,
             "high": 73.45,
             "sl": 102.83,
             "live": true
@@ -53,7 +53,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 104.2,
-            "cur": 110.75,
+            "cur": 104.85,
             "high": 124.15,
             "sl": 145.88,
             "live": true
@@ -93,34 +93,13 @@
       ]
     },
     "nifty_1pm_drop": {
-      "status": "OPEN",
-      "note": "4 of 7 candles red 12:45\u20131:15 PM",
-      "trade": {
-        "kind": "buyer",
-        "legs": [
-          {
-            "symbol": "NIFTY 03 NOV 23250 PE",
-            "strike": 23250,
-            "opt": "PE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 90.15,
-            "cur": 110.75,
-            "high": 124.15,
-            "sl": 63.1,
-            "live": true,
-            "target": 144.24
-          }
-        ],
-        "trail": 0.15,
-        "exit": "15:15",
-        "why": "4 of 7 candles red 12:45\u20131:15 PM",
-        "entry_time": "13:20",
-        "spot": 23261.69921875
-      },
-      "pnl": 0.0,
+      "status": "CLOSED",
+      "note": "Trailing stop hit",
+      "trade": null,
+      "pnl": 955.5,
       "events": [
-        "13:20 Entry @ NIFTY 23,262"
+        "13:20 Entry @ NIFTY 23,262",
+        "13:44 Exit +\u20b9956"
       ]
     },
     "option_buying": {
@@ -136,7 +115,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 96.85,
-            "cur": 49.7,
+            "cur": 52.45,
             "high": 114.2,
             "sl": null,
             "live": true
@@ -148,7 +127,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 94.0,
-            "cur": 142.2,
+            "cur": 134.8,
             "high": 157.3,
             "sl": null,
             "live": true
@@ -179,7 +158,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 73.45,
-            "cur": 68.25,
+            "cur": 71.6,
             "high": 73.45,
             "sl": 102.83,
             "live": true
@@ -191,7 +170,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 104.2,
-            "cur": 110.75,
+            "cur": 104.85,
             "high": 124.15,
             "sl": 145.88,
             "live": true
