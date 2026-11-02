@@ -1,0 +1,74 @@
+{
+  "date": "2026-11-02",
+  "announced": true,
+  "summary_sent": false,
+  "stale_warned": false,
+  "strategies": {
+    "hedged_selling": {
+      "status": "WAITING",
+      "note": "",
+      "trade": null,
+      "pnl": 0.0,
+      "events": []
+    },
+    "nifty_10_12_put": {
+      "status": "WAITING",
+      "note": "",
+      "trade": null,
+      "pnl": 0.0,
+      "events": []
+    },
+    "nifty_gap_drive": {
+      "status": "OPEN",
+      "note": "Gap up +186 pts at open",
+      "trade": {
+        "kind": "buyer",
+        "legs": [
+          {
+            "symbol": "NIFTY 03 NOV 23300 CE",
+            "strike": 23300,
+            "opt": "CE",
+            "side": "BUY",
+            "qty": 65,
+            "entry": 107.4,
+            "cur": 99.95,
+            "high": 111.7,
+            "sl": 80.55,
+            "live": true,
+            "target": 161.1
+          }
+        ],
+        "trail": null,
+        "exit": "15:15",
+        "why": "Gap up +186 pts at open",
+        "entry_time": "09:47",
+        "spot": 23316.599609375
+      },
+      "pnl": 0.0,
+      "events": [
+        "09:47 Entry @ NIFTY 23,317"
+      ]
+    },
+    "nifty_1pm_drop": {
+      "status": "WAITING",
+      "note": "",
+      "trade": null,
+      "pnl": 0.0,
+      "events": []
+    },
+    "option_buying": {
+      "status": "WAITING",
+      "note": "",
+      "trade": null,
+      "pnl": 0.0,
+      "events": []
+    },
+    "short_straddle": {
+      "status": "WAITING",
+      "note": "",
+      "trade": null,
+      "pnl": 0.0,
+      "events": []
+    }
+  }
+}
