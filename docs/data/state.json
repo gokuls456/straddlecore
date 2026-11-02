@@ -17,7 +17,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 9.1,
-            "cur": 9.1,
+            "cur": 8.55,
             "high": 9.1,
             "sl": null,
             "live": true
@@ -29,8 +29,8 @@
             "side": "BUY",
             "qty": 65,
             "entry": 18.25,
-            "cur": 18.25,
-            "high": 18.25,
+            "cur": 19.2,
+            "high": 22.05,
             "sl": null,
             "live": true
           },
@@ -41,7 +41,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 73.45,
-            "cur": 73.45,
+            "cur": 68.25,
             "high": 73.45,
             "sl": 102.83,
             "live": true
@@ -53,8 +53,8 @@
             "side": "SELL",
             "qty": 65,
             "entry": 104.2,
-            "cur": 104.2,
-            "high": 104.2,
+            "cur": 110.75,
+            "high": 124.15,
             "sl": 145.88,
             "live": true
           }
@@ -105,8 +105,8 @@
             "side": "BUY",
             "qty": 65,
             "entry": 90.15,
-            "cur": 104.2,
-            "high": 110.0,
+            "cur": 110.75,
+            "high": 124.15,
             "sl": 63.1,
             "live": true,
             "target": 144.24
@@ -136,7 +136,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 96.85,
-            "cur": 53.35,
+            "cur": 49.7,
             "high": 114.2,
             "sl": null,
             "live": true
@@ -148,8 +148,8 @@
             "side": "BUY",
             "qty": 65,
             "entry": 94.0,
-            "cur": 134.55,
-            "high": 151.15,
+            "cur": 142.2,
+            "high": 157.3,
             "sl": null,
             "live": true
           }
@@ -179,7 +179,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 73.45,
-            "cur": 73.45,
+            "cur": 68.25,
             "high": 73.45,
             "sl": 102.83,
             "live": true
@@ -191,8 +191,8 @@
             "side": "SELL",
             "qty": 65,
             "entry": 104.2,
-            "cur": 104.2,
-            "high": 104.2,
+            "cur": 110.75,
+            "high": 124.15,
             "sl": 145.88,
             "live": true
           }
