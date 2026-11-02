@@ -1963,6 +1963,14 @@ body::after {
     color: var(--text-secondary);
 }
 .telegram-box { margin-top: 12px; }
+.tg-connected {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 13px;
+}
 .signal-box {
     margin-top: 14px;
     padding-top: 12px;

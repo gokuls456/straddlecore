@@ -205,6 +205,14 @@
                                     <span id="tg-enabled-label">Off</span>
                                 </label>
                             </div>
+                            <div id="tg-connected" class="tg-connected hidden">
+                                <span>✅ Connected to <strong id="tg-chat-name">your chat</strong></span>
+                                <div class="key-actions" style="margin:0;">
+                                    <button class="btn btn-sm btn-primary" onclick="testTelegram()">📨 Send Test</button>
+                                    <button class="btn btn-sm btn-outline" onclick="showTelegramSetup(true)">Change bot</button>
+                                </div>
+                            </div>
+                            <div id="tg-setup">
                             <ol class="tg-steps">
                                 <li>In Telegram, open <strong>@BotFather</strong>, send <code>/newbot</code>, and copy the token it gives you.</li>
                                 <li>Paste it below, open your new bot and press <strong>Start</strong>.</li>
@@ -220,6 +228,7 @@
                             <div class="key-actions">
                                 <button class="btn btn-sm btn-outline" id="btn-tg-connect" onclick="connectTelegram()">🔗 Connect</button>
                                 <button class="btn btn-sm btn-primary" id="btn-tg-test" onclick="testTelegram()">📨 Send Test</button>
+                            </div>
                             </div>
                             <div id="tg-msg" class="inline-msg"></div>
 

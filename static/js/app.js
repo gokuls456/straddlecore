@@ -1166,9 +1166,16 @@ function applyTelegramConfig(t) {
     if (label) label.textContent = t.enabled ? 'On' : 'Off';
     const token = document.getElementById('tg-bot-token');
     if (token) token.placeholder = t.has_bot_token ? 'Saved on server • paste to replace' : '123456789:AA...';
-    if (t.chat_id && !document.getElementById('tg-msg')?.textContent) {
-        setTelegramMsg(true, `Linked to ${t.chat_name || 'chat'} (${t.chat_id}). Alerts are ${t.enabled ? 'ON' : 'OFF'}.`);
-    }
+    // Once a bot and chat are linked, show a short "connected" line instead of the setup steps.
+    const connected = !!(t.has_bot_token && t.chat_id);
+    const name = document.getElementById('tg-chat-name');
+    if (name) name.textContent = t.chat_name || 'your chat';
+    showTelegramSetup(!connected);
+}
+
+function showTelegramSetup(show) {
+    document.getElementById('tg-setup')?.classList.toggle('hidden', !show);
+    document.getElementById('tg-connected')?.classList.toggle('hidden', show);
 }
 
 async function loadTelegramConfig() {
