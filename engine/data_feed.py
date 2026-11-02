@@ -107,6 +107,10 @@ class NiftyDataFeed:
 
         # Construct full intraday dataset day-by-day
         all_day_dfs = []
+        # Today's session is incomplete until the close: synthesising it would invent the
+        # rest of the day (future stop-losses and exits), so leave it out until 15:35 IST.
+        now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        skip_today = now_ist.date() == today and now_ist.time() < time(15, 35)
         
         # If daily_df is available, use real dates
         if not daily_df.empty:
@@ -119,6 +123,8 @@ class NiftyDataFeed:
         for d in valid_dates:
             # Exclude weekends
             if d.weekday() >= 5:
+                continue
+            if skip_today and d == today:
                 continue
 
             # Check if we have real 5m bars for this date
@@ -153,9 +159,10 @@ class NiftyDataFeed:
 
         if all_day_dfs:
             combined_df = pd.concat(all_day_dfs).sort_index()
-            # Cache to parquet
+            # Cache to parquet (not while today is left out, or the cache would stay without it)
             try:
-                combined_df.to_parquet(cache_path)
+                if not skip_today:
+                    combined_df.to_parquet(cache_path)
             except Exception as e:
                 logger.warning(f"Failed to cache parquet: {e}")
             return self._group_by_day(combined_df)
