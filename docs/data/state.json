@@ -5,8 +5,8 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "OPEN",
-      "note": "Daily 10 AM entry",
+      "status": "REENTRY_WAIT",
+      "note": "Stop-loss hit on 23300 PE",
       "trade": {
         "kind": "seller",
         "legs": [
@@ -17,7 +17,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 10.1,
-            "cur": 11.9,
+            "cur": 6.1,
             "high": 13.55,
             "sl": null,
             "live": true
@@ -29,8 +29,8 @@
             "side": "BUY",
             "qty": 65,
             "entry": 20.6,
-            "cur": 15.55,
-            "high": 22.35,
+            "cur": 30.0,
+            "high": 30.0,
             "sl": null,
             "live": true
           },
@@ -41,7 +41,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 96.85,
-            "cur": 107.45,
+            "cur": 49.2,
             "high": 114.2,
             "sl": 116.22,
             "live": true
@@ -53,8 +53,8 @@
             "side": "SELL",
             "qty": 65,
             "entry": 94.0,
-            "cur": 74.55,
-            "high": 103.0,
+            "cur": 151.15,
+            "high": 151.15,
             "sl": 112.8,
             "live": true
           }
@@ -67,10 +67,12 @@
         "entry_time": "10:00",
         "spot": 23310.19921875
       },
-      "pnl": 0.0,
+      "pnl": -266.5,
       "events": [
-        "10:00 Entry @ NIFTY 23,310"
-      ]
+        "10:00 Entry @ NIFTY 23,310",
+        "13:16 Exit \u2212\u20b9266"
+      ],
+      "reentry_at": "2026-11-02T13:31:49.692301"
     },
     "nifty_10_12_put": {
       "status": "SKIPPED",
@@ -90,11 +92,35 @@
       ]
     },
     "nifty_1pm_drop": {
-      "status": "WAITING",
-      "note": "",
-      "trade": null,
+      "status": "OPEN",
+      "note": "4 of 7 candles red 12:45\u20131:15 PM",
+      "trade": {
+        "kind": "buyer",
+        "legs": [
+          {
+            "symbol": "NIFTY 03 NOV 23250 PE",
+            "strike": 23250,
+            "opt": "PE",
+            "side": "BUY",
+            "qty": 65,
+            "entry": 90.15,
+            "cur": 90.15,
+            "high": 90.15,
+            "sl": 63.1,
+            "live": true,
+            "target": 144.24
+          }
+        ],
+        "trail": 0.15,
+        "exit": "15:15",
+        "why": "4 of 7 candles red 12:45\u20131:15 PM",
+        "entry_time": "13:20",
+        "spot": 23261.69921875
+      },
       "pnl": 0.0,
-      "events": []
+      "events": [
+        "13:20 Entry @ NIFTY 23,262"
+      ]
     },
     "option_buying": {
       "status": "OPEN",
@@ -109,7 +135,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 96.85,
-            "cur": 107.45,
+            "cur": 62.3,
             "high": 114.2,
             "sl": null,
             "live": true
@@ -121,8 +147,8 @@
             "side": "BUY",
             "qty": 65,
             "entry": 94.0,
-            "cur": 74.55,
-            "high": 103.0,
+            "cur": 119.15,
+            "high": 151.15,
             "sl": null,
             "live": true
           }
@@ -140,8 +166,8 @@
       ]
     },
     "short_straddle": {
-      "status": "OPEN",
-      "note": "Daily 10 AM entry",
+      "status": "REENTRY_WAIT",
+      "note": "Stop-loss hit on 23300 PE",
       "trade": {
         "kind": "seller",
         "legs": [
@@ -152,7 +178,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 96.85,
-            "cur": 107.45,
+            "cur": 49.2,
             "high": 114.2,
             "sl": 116.22,
             "live": true
@@ -164,8 +190,8 @@
             "side": "SELL",
             "qty": 65,
             "entry": 94.0,
-            "cur": 74.55,
-            "high": 103.0,
+            "cur": 151.15,
+            "high": 151.15,
             "sl": 112.8,
             "live": true
           }
@@ -178,10 +204,19 @@
         "entry_time": "10:00",
         "spot": 23310.19921875
       },
-      "pnl": 0.0,
+      "pnl": -617.5,
       "events": [
-        "10:00 Entry @ NIFTY 23,310"
-      ]
+        "10:00 Entry @ NIFTY 23,310",
+        "13:16 Exit \u2212\u20b9618"
+      ],
+      "reentry_at": "2026-11-02T13:31:49.692301"
+    },
+    "trend_hedged_straddle": {
+      "status": "SKIPPED",
+      "note": "Missed: scanner started after 10:15",
+      "trade": null,
+      "pnl": 0.0,
+      "events": []
     }
   }
 }
