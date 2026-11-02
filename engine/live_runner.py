@@ -478,6 +478,24 @@ class LiveAlgoRunner:
         self.daily_pnl = round(total, 2)
         self.gross_pnl = self.daily_pnl
 
+    def _refresh_market(self):
+        """NIFTY spot and India VIX from Yahoo Finance when no broker supplies them (demo mode).
+        Cached for 30 s; keeps the last good values on failure."""
+        if time.time() - getattr(self, "_market_at", 0) < 30:
+            return
+        self._market_at = time.time()
+        try:
+            from engine.signal_scanner import fetch_market_data, now_ist
+
+            candles, prev_close, vix = fetch_market_data(now_ist())
+            spot = float(candles["close"].iloc[-1]) if not candles.empty else prev_close
+            if spot > 0:
+                self.spot = spot
+            if vix > 0:
+                self.iv = vix / 100.0
+        except Exception as exc:
+            logger.warning("Market data fetch failed: %s", exc)
+
     def _estimate_premium(self, strike: int, opt_type: str) -> float:
         if self.broker:
             leg = self.broker.get_option_leg(strike, opt_type, self.expiry)
@@ -491,8 +509,8 @@ class LiveAlgoRunner:
         today_frac = max(0.04, (15 * 60 + 30 - (now.hour * 60 + now.minute)) / 375.0)
         t = max(0.0008, (today_frac + trading_days_until(now.date(), expiry)) / 252.0)
         if opt_type == "CE":
-            return max(0.5, bs_call_price(self.spot or 25000, strike, t, 0.065, 0.14))
-        return max(0.5, bs_put_price(self.spot or 25000, strike, t, 0.065, 0.14))
+            return max(0.5, bs_call_price(self.spot or 25000, strike, t, 0.065, getattr(self, "iv", 0.14)))
+        return max(0.5, bs_put_price(self.spot or 25000, strike, t, 0.065, getattr(self, "iv", 0.14)))
 
     def _place_leg(self, strike: int, opt_type: str, side: str, qty: int, branch: str, sl: Optional[float] = None) -> Dict[str, Any]:
         trading_symbol = f"NIFTY{self.expiry[2:4]}{datetime.strptime(self.expiry, '%Y-%m-%d').strftime('%b').upper()}{strike}{opt_type}"
@@ -559,6 +577,8 @@ class LiveAlgoRunner:
         if self.spot <= 0:
             if self.broker:
                 self.spot = self.broker.get_nifty_spot()
+            else:
+                self._refresh_market()
             if self.spot <= 0:
                 self.spot = 25000.0
         atm = get_atm_strike(self.spot)
@@ -716,6 +736,8 @@ class LiveAlgoRunner:
             spot = self.broker.get_nifty_spot()
             if spot:
                 self.spot = spot
+        else:
+            self._refresh_market()
 
         if not self.has_entered and now >= market_open:
             if not self._enter_structure("10:00 AM trigger"):
