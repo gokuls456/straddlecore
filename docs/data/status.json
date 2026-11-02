@@ -11,7 +11,7 @@
   ]
  },
  "date": "2026-11-02",
- "last_tick": "11:01:16",
+ "last_tick": "11:11:32",
  "price_source": "INDstocks live",
  "quotes_error": "",
  "last_error": "",
@@ -22,7 +22,7 @@
    "name": "Iron Butterfly",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": 412.75,
+   "pnl": 373.75,
    "open_trade": {
     "kind": "seller",
     "legs": [
@@ -33,7 +33,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 10.1,
-      "cur": 9.6,
+      "cur": 10.15,
       "high": 11.2,
       "sl": null,
       "live": true
@@ -45,7 +45,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 20.6,
-      "cur": 16.4,
+      "cur": 15.9,
       "high": 22.35,
       "sl": null,
       "live": true
@@ -57,7 +57,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 96.85,
-      "cur": 102.25,
+      "cur": 104.5,
       "high": 112.15,
       "sl": 116.22,
       "live": true
@@ -69,7 +69,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 94.0,
-      "cur": 77.55,
+      "cur": 75.95,
       "high": 103.0,
       "sl": 112.8,
       "live": true
@@ -97,7 +97,7 @@
    "name": "Gap Drive",
    "status": "OPEN",
    "note": "Gap up +186 pts at open",
-   "pnl": -334.75,
+   "pnl": -188.5,
    "open_trade": {
     "kind": "buyer",
     "legs": [
@@ -108,7 +108,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 107.4,
-      "cur": 102.25,
+      "cur": 104.5,
       "high": 112.15,
       "sl": 80.55,
       "live": true,
@@ -135,7 +135,7 @@
    "name": "Long Straddle",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": -718.25,
+   "pnl": -676.0,
    "open_trade": {
     "kind": "guard",
     "legs": [
@@ -146,7 +146,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 96.85,
-      "cur": 102.25,
+      "cur": 104.5,
       "high": 112.15,
       "sl": null,
       "live": true
@@ -158,7 +158,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 94.0,
-      "cur": 77.55,
+      "cur": 75.95,
       "high": 103.0,
       "sl": null,
       "live": true
@@ -177,7 +177,7 @@
    "name": "Short Straddle",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": 718.25,
+   "pnl": 676.0,
    "open_trade": {
     "kind": "seller",
     "legs": [
@@ -188,7 +188,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 96.85,
-      "cur": 102.25,
+      "cur": 104.5,
       "high": 112.15,
       "sl": 116.22,
       "live": true
@@ -200,7 +200,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 94.0,
-      "cur": 77.55,
+      "cur": 75.95,
       "high": 103.0,
       "sl": 112.8,
       "live": true
@@ -230,5 +230,5 @@
    "short_straddle": 0
   }
  },
- "updated_at": "2026-11-02 11:01:16 IST"
+ "updated_at": "2026-11-02 11:11:32 IST"
 }
