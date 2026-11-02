@@ -11,7 +11,7 @@
   ]
  },
  "date": "2026-11-02",
- "last_tick": "10:00:14",
+ "last_tick": "10:10:00",
  "price_source": "INDstocks live",
  "quotes_error": "",
  "last_error": "",
@@ -22,7 +22,7 @@
    "name": "Iron Butterfly",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": 0.0,
+   "pnl": 136.5,
    "open_trade": {
     "kind": "seller",
     "legs": [
@@ -33,7 +33,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 10.1,
-      "cur": 10.1,
+      "cur": 9.4,
       "high": 10.1,
       "sl": null,
       "live": true
@@ -45,8 +45,8 @@
       "side": "BUY",
       "qty": 65,
       "entry": 20.6,
-      "cur": 20.6,
-      "high": 20.6,
+      "cur": 20.05,
+      "high": 22.35,
       "sl": null,
       "live": true
      },
@@ -57,7 +57,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 96.85,
-      "cur": 96.85,
+      "cur": 92.3,
       "high": 96.85,
       "sl": 116.22,
       "live": true
@@ -69,8 +69,8 @@
       "side": "SELL",
       "qty": 65,
       "entry": 94.0,
-      "cur": 94.0,
-      "high": 94.0,
+      "cur": 95.2,
+      "high": 101.55,
       "sl": 112.8,
       "live": true
      }
@@ -87,8 +87,8 @@
   {
    "id": "nifty_10_12_put",
    "name": "10:12 Put",
-   "status": "WAITING",
-   "note": "",
+   "status": "SKIPPED",
+   "note": "No trade: 10:05 candle green and above range mid 23,271",
    "pnl": 0.0,
    "open_trade": null
   },
@@ -97,7 +97,7 @@
    "name": "Gap Drive",
    "status": "OPEN",
    "note": "Gap up +186 pts at open",
-   "pnl": -685.75,
+   "pnl": -981.5,
    "open_trade": {
     "kind": "buyer",
     "legs": [
@@ -108,7 +108,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 107.4,
-      "cur": 96.85,
+      "cur": 92.3,
       "high": 111.7,
       "sl": 80.55,
       "live": true,
@@ -135,7 +135,7 @@
    "name": "Long Straddle",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": 0.0,
+   "pnl": -217.75,
    "open_trade": {
     "kind": "guard",
     "legs": [
@@ -146,7 +146,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 96.85,
-      "cur": 96.85,
+      "cur": 92.3,
       "high": 96.85,
       "sl": null,
       "live": true
@@ -158,8 +158,8 @@
       "side": "BUY",
       "qty": 65,
       "entry": 94.0,
-      "cur": 94.0,
-      "high": 94.0,
+      "cur": 95.2,
+      "high": 101.55,
       "sl": null,
       "live": true
      }
@@ -177,7 +177,7 @@
    "name": "Short Straddle",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": 0.0,
+   "pnl": 217.75,
    "open_trade": {
     "kind": "seller",
     "legs": [
@@ -188,7 +188,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 96.85,
-      "cur": 96.85,
+      "cur": 92.3,
       "high": 96.85,
       "sl": 116.22,
       "live": true
@@ -200,8 +200,8 @@
       "side": "SELL",
       "qty": 65,
       "entry": 94.0,
-      "cur": 94.0,
-      "high": 94.0,
+      "cur": 95.2,
+      "high": 101.55,
       "sl": 112.8,
       "live": true
      }
@@ -230,5 +230,5 @@
    "short_straddle": 0
   }
  },
- "updated_at": "2026-11-02 10:00:14 IST"
+ "updated_at": "2026-11-02 10:10:00 IST"
 }

@@ -17,7 +17,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 10.1,
-            "cur": 10.1,
+            "cur": 9.4,
             "high": 10.1,
             "sl": null,
             "live": true
@@ -29,8 +29,8 @@
             "side": "BUY",
             "qty": 65,
             "entry": 20.6,
-            "cur": 20.6,
-            "high": 20.6,
+            "cur": 20.05,
+            "high": 22.35,
             "sl": null,
             "live": true
           },
@@ -41,7 +41,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 96.85,
-            "cur": 96.85,
+            "cur": 92.3,
             "high": 96.85,
             "sl": 116.22,
             "live": true
@@ -53,8 +53,8 @@
             "side": "SELL",
             "qty": 65,
             "entry": 94.0,
-            "cur": 94.0,
-            "high": 94.0,
+            "cur": 95.2,
+            "high": 101.55,
             "sl": 112.8,
             "live": true
           }
@@ -73,8 +73,8 @@
       ]
     },
     "nifty_10_12_put": {
-      "status": "WAITING",
-      "note": "",
+      "status": "SKIPPED",
+      "note": "No trade: 10:05 candle green and above range mid 23,271",
       "trade": null,
       "pnl": 0.0,
       "events": []
@@ -92,7 +92,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 107.4,
-            "cur": 96.85,
+            "cur": 92.3,
             "high": 111.7,
             "sl": 80.55,
             "live": true,
@@ -130,7 +130,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 96.85,
-            "cur": 96.85,
+            "cur": 92.3,
             "high": 96.85,
             "sl": null,
             "live": true
@@ -142,8 +142,8 @@
             "side": "BUY",
             "qty": 65,
             "entry": 94.0,
-            "cur": 94.0,
-            "high": 94.0,
+            "cur": 95.2,
+            "high": 101.55,
             "sl": null,
             "live": true
           }
@@ -173,7 +173,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 96.85,
-            "cur": 96.85,
+            "cur": 92.3,
             "high": 96.85,
             "sl": 116.22,
             "live": true
@@ -185,8 +185,8 @@
             "side": "SELL",
             "qty": 65,
             "entry": 94.0,
-            "cur": 94.0,
-            "high": 94.0,
+            "cur": 95.2,
+            "high": 101.55,
             "sl": 112.8,
             "live": true
           }
