@@ -216,9 +216,9 @@ class UnifiedStrategyRunner:
         elif self.strategy_id == "nifty_1pm_drop":
             return self._run_1pm_drop(hist_data)
 
-        # Fallback
-        engine = NiftyStraddleEngine(strategy_mode="hedged_selling", **self.params)
-        return engine.run_backtest(hist_data)
+        # Unknown strategy: run Iron Butterfly through the normal path (it maps the request
+        # params onto engine arguments; passing them straight to the engine crashes on extras like "period").
+        return UnifiedStrategyRunner("hedged_selling", **self.params).run(hist_data)
 
     def _run_10_12_put(self, hist_data: Dict[date, pd.DataFrame]) -> Dict[str, Any]:
         capital = float(self.params.get("capital") or 30000.0)
