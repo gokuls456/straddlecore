@@ -302,6 +302,13 @@
                                 </div>
                                 <span>Naked 10 lots short straddle • 20% SL • High theta capture</span>
                             </button>
+                            <button class="strategy-pick" data-mode="trend_hedged_straddle" onclick="selectLiveStrategy('trend_hedged_straddle')">
+                                <div class="pick-top">
+                                    <strong>🧭 Trend-Hedged Straddle</strong>
+                                    <span class="strat-tag tag-purple">One-Side Hedge</span>
+                                </div>
+                                <span>Sell ATM CE + PE • buy +300 CE if opens up / −300 PE if opens down • 10:00 AM</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -417,6 +424,7 @@
                         <option value="nifty_1pm_drop">💥 1 PM Volatility Drop</option>
                         <option value="option_buying">🎯 Option Buying (Long Straddle)</option>
                         <option value="short_straddle">🏛️ Classic Short Straddle</option>
+                        <option value="trend_hedged_straddle">🧭 Trend-Hedged Straddle</option>
                     </select>
                 </div>
                 <div class="toolbar-period-select-wrap">

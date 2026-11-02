@@ -489,6 +489,9 @@ class LiveAlgoRunner:
 
             candles, prev_close, vix = fetch_market_data(now_ist())
             spot = float(candles["close"].iloc[-1]) if not candles.empty else prev_close
+            self.prev_close = prev_close or getattr(self, "prev_close", 0.0)
+            if not candles.empty:
+                self.day_open = float(candles["open"].iloc[0])
             if spot > 0:
                 self.spot = spot
             if vix > 0:
@@ -607,6 +610,21 @@ class LiveAlgoRunner:
             ce = self._place_leg(atm, "CE", "BUY", qty, "Branch 1 (CE)", None)
             pe = self._place_leg(atm, "PE", "BUY", qty, "Branch 2 (PE)", None)
             summary = f"{reason}: Bought ATM {atm} straddle ({lots} lot)."
+        elif self.strategy_mode == "trend_hedged_straddle":
+            # Short straddle + one wing on the side the market opened (open vs yesterday's close).
+            self._refresh_market()
+            prev, day_open = getattr(self, "prev_close", 0.0), getattr(self, "day_open", 0.0)
+            opened_up = not (prev and day_open) or day_open >= prev
+            wing_type = "CE" if opened_up else "PE"
+            wing = atm + self.hedge_distance_pts if opened_up else atm - self.hedge_distance_pts
+            self._place_leg(wing, wing_type, "BUY", qty, f"Hedge {wing_type} ({'+' if opened_up else '-'}{self.hedge_distance_pts})", None)
+            ce_px = self._estimate_premium(atm, "CE")
+            pe_px = self._estimate_premium(atm, "PE")
+            self._place_leg(atm, "CE", "SELL", qty, "Branch 1 (ATM CE)", ce_px * (1 + sl_pct) if with_sl else None)
+            self._place_leg(atm, "PE", "SELL", qty, "Branch 2 (ATM PE)", pe_px * (1 + sl_pct) if with_sl else None)
+            gap = f"{day_open - prev:+.0f} pts" if prev and day_open else "n/a"
+            summary = (f"{reason}: Trend-Hedged Straddle ATM {atm}, opened {'up' if opened_up else 'down'} ({gap}) "
+                       f"→ {wing} {wing_type} wing ({lots} lot).")
         elif self.strategy_mode == "hedged_selling":
             wing_ce = atm + self.hedge_distance_pts
             wing_pe = atm - self.hedge_distance_pts

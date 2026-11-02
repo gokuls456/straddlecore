@@ -109,7 +109,7 @@ class DaySimulationResult:
 
 class NiftyStraddleEngine:
     def __init__(self, 
-                 strategy_mode: str = "option_buying",  # "option_buying", "hedged_selling", "short_straddle"
+                 strategy_mode: str = "option_buying",  # "option_buying", "hedged_selling", "short_straddle", "trend_hedged_straddle"
                  capital: float = 40000.0,
                  initial_lots: Optional[int] = None,
                  reentry_lots: Optional[int] = None,
@@ -139,6 +139,7 @@ class NiftyStraddleEngine:
         self.default_iv = default_iv
         self.execution_mode = execution_mode  # "fyers_calibrated" or "raw_spot_wick"
         self.hedge_distance_pts = hedge_distance_pts
+        self.prev_close: Optional[float] = None
         # Re-entry risk controls (defaults keep the original naked, no-SL re-entry).
         self.reentry_enabled = reentry_enabled
         self.reentry_hedged = reentry_hedged      # hedged_selling: buy wings with the re-entry too
@@ -356,6 +357,48 @@ class NiftyStraddleEngine:
                         'timestamp': current_dt.strftime('%H:%M:%S'),
                         'type': 'ENTRY_INITIAL',
                         'detail': f"Iron Butterfly (Hedged): Bought wings ({otm_ce_strike} CE @ ₹{otm_ce_entry:.2f} / {otm_pe_strike} PE @ ₹{otm_pe_entry:.2f}) & Sold {eff_lots} lot ATM {atm_strike} Straddle. CE @ ₹{ce_entry:.2f}, PE @ ₹{pe_entry:.2f}"
+                    })
+
+                elif self.strategy_mode == "trend_hedged_straddle":
+                    # Short ATM straddle + one OTM wing on the side the market opened
+                    # (open above yesterday's close → buy a CE wing, else a PE wing).
+                    eff_lots = self.initial_lots if self.initial_lots else 1
+                    eff_reentry_lots = self.reentry_lots if self.reentry_lots else 1
+                    qty_initial = eff_lots * self.lot_size
+
+                    day_open = float(day_df.iloc[0]['open'])
+                    opened_up = self.prev_close is None or day_open >= self.prev_close
+                    wing_type = "CE" if opened_up else "PE"
+                    wing_strike = atm_strike + self.hedge_distance_pts if opened_up else atm_strike - self.hedge_distance_pts
+                    w_ce_p, w_pe_p = self.get_option_prices(open_p, wing_strike, current_dt, iv)
+                    wing_entry = apply_slippage(w_ce_p if opened_up else w_pe_p, is_buy=True)
+                    wing_pos = StrategyPosition(
+                        leg_id=f"{wing_type}_WING", symbol=f"NIFTY_{wing_strike}_{wing_type}", opt_type=wing_type,
+                        strike=wing_strike, qty=qty_initial, entry_price=wing_entry,
+                        entry_time=current_dt, sl_price=None, is_reentry=False, branch_id=f"Hedge Wing {wing_type}", side="BUY"
+                    )
+
+                    ce_entry = apply_slippage(ce_prem, is_buy=False)
+                    pe_entry = apply_slippage(pe_prem, is_buy=False)
+                    ce_sl = ce_entry * (1.0 + self.sl_pct)
+                    pe_sl = pe_entry * (1.0 + self.sl_pct)
+                    ce_initial_pos = StrategyPosition(
+                        leg_id="CE_MAIN", symbol=f"NIFTY_{atm_strike}_CE", opt_type="CE",
+                        strike=atm_strike, qty=qty_initial, entry_price=ce_entry,
+                        entry_time=current_dt, sl_price=ce_sl, is_reentry=False, branch_id="Branch 1", side="SELL"
+                    )
+                    pe_initial_pos = StrategyPosition(
+                        leg_id="PE_MAIN", symbol=f"NIFTY_{atm_strike}_PE", opt_type="PE",
+                        strike=atm_strike, qty=qty_initial, entry_price=pe_entry,
+                        entry_time=current_dt, sl_price=pe_sl, is_reentry=False, branch_id="Branch 2", side="SELL"
+                    )
+                    positions.extend([wing_pos, ce_initial_pos, pe_initial_pos])
+
+                    gap = f"{day_open - self.prev_close:+.0f} pts vs prev close" if self.prev_close else "no prev close"
+                    result.events.append({
+                        'timestamp': current_dt.strftime('%H:%M:%S'),
+                        'type': 'ENTRY_INITIAL',
+                        'detail': f"Trend-Hedged Straddle: market opened {'up' if opened_up else 'down'} ({gap}). Bought {wing_strike} {wing_type} wing @ ₹{wing_entry:.2f} & Sold {eff_lots} lot ATM {atm_strike} Straddle. CE @ ₹{ce_entry:.2f}, PE @ ₹{pe_entry:.2f}"
                     })
 
                 else:
@@ -603,11 +646,13 @@ class NiftyStraddleEngine:
         sorted_dates = sorted(historical_data_by_day.keys())
         # Dates with data double as the holiday calendar for expiry dates.
         self.trading_days = set(sorted_dates)
+        self.prev_close = None  # trend_hedged_straddle compares today's open with this
         for d in sorted_dates:
             day_df = historical_data_by_day[d]
             if len(day_df) < 10:
                 continue
             res = self.simulate_day(day_df)
+            self.prev_close = float(day_df.iloc[-1]['close'])
             daily_results.append(res)
             cumulative_pnl += res.net_pnl
             

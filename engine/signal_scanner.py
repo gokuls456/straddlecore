@@ -48,7 +48,8 @@ TICK_SECONDS = 30
 MISSED_AFTER = timedelta(minutes=15)  # scanner started too late to act on a signal
 STALE_AFTER = timedelta(minutes=12)   # newest candle older than this → data warning
 
-ALL_STRATEGIES = ["hedged_selling", "nifty_10_12_put", "nifty_gap_drive", "nifty_1pm_drop", "option_buying", "short_straddle"]
+ALL_STRATEGIES = ["hedged_selling", "nifty_10_12_put", "nifty_gap_drive", "nifty_1pm_drop", "option_buying", "short_straddle",
+                  "trend_hedged_straddle"]
 
 SHORT_NAMES = {
     "hedged_selling": "Iron Butterfly",
@@ -57,6 +58,7 @@ SHORT_NAMES = {
     "nifty_1pm_drop": "1 PM Drop",
     "option_buying": "Long Straddle",
     "short_straddle": "Short Straddle",
+    "trend_hedged_straddle": "Trend Straddle",
 }
 
 # Single-option buyers: (stop-loss %, target %, trailing % below the highest premium or None, exit time)
@@ -288,7 +290,8 @@ class SignalScanner:
             if st["status"] == "WAITING":
                 self._check_entry(sid, st, now, done, spot, prev_close, iv)
             elif st["status"] == "REENTRY_WAIT" and now >= datetime.fromisoformat(st["reentry_at"]):
-                self._enter(sid, st, now, spot, iv, f"Re-entry {int(REENTRY_WAIT.total_seconds() // 60)} min after stop-loss", reentry=True)
+                self._enter(sid, st, now, spot, iv, f"Re-entry {int(REENTRY_WAIT.total_seconds() // 60)} min after stop-loss",
+                            opt=st.get("wing"), reentry=True)
             if st["status"] == "OPEN":
                 self._manage(sid, st, now, spot, iv)
 
@@ -314,6 +317,17 @@ class SignalScanner:
             if self._too_late(now, dtime(10, 0)):
                 return self._skip(st, "Missed: scanner started after 10:15")
             return self._enter(sid, st, now, spot, iv, "Daily 10 AM entry")
+
+        if sid == "trend_hedged_straddle":
+            if t < dtime(10, 0):
+                return
+            if self._too_late(now, dtime(10, 0)):
+                return self._skip(st, "Missed: scanner started after 10:15")
+            if done.empty or not prev_close:
+                return self._skip(st, "No previous close / opening candle")
+            gap = float(done["open"].iloc[0]) - prev_close
+            st["wing"] = "CE" if gap >= 0 else "PE"
+            return self._enter(sid, st, now, spot, iv, f"Opened {'up' if gap >= 0 else 'down'} {gap:+.0f} pts → {st['wing']} wing", opt=st["wing"])
 
         if sid == "nifty_gap_drive":
             if t < dtime(9, 45):
@@ -375,6 +389,10 @@ class SignalScanner:
             legs = []
             if sid == "hedged_selling":
                 legs += [self._leg(now, spot, iv, atm + WING_PTS, "CE", "BUY"), self._leg(now, spot, iv, atm - WING_PTS, "PE", "BUY")]
+                g = round(min(cap, 100000) * 0.10) if cap <= 100000 else 15000
+            elif sid == "trend_hedged_straddle":
+                wing = opt or "CE"  # one wing on the side the market opened
+                legs.append(self._leg(now, spot, iv, atm + WING_PTS if wing == "CE" else atm - WING_PTS, wing, "BUY"))
                 g = round(min(cap, 100000) * 0.10) if cap <= 100000 else 15000
             else:
                 g = 1500  # ±₹15,000 guard on the default 10 lots, scaled to the 1 lot alerted here
@@ -477,6 +495,8 @@ class SignalScanner:
             lines.append(f"🎯 Exit all at +₹{trade['target']:,.0f} / −₹{abs(trade['stop']):,.0f}")
             if sid == "short_straddle":
                 lines.append("⚠️ No hedge: needs ~₹1.6L+ margin per leg")
+            elif sid == "trend_hedged_straddle":
+                lines.append("⚠️ One side unhedged: check margin in your broker")
         lines += [f"⏰ Exit by {exit_at}", "",
                   f"<i>{tg.esc(trade['why'])} · NIFTY {trade['spot']:,.0f} · "
                   f"{(self._quotes.name + ' live prices') if live and self._quotes else '~ = estimated price'}</i>"]

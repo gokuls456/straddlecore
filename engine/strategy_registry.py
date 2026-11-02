@@ -10,6 +10,7 @@ Supports:
 4. 1 PM Volatility Drop — Post-lunch European open breakdown put buyer (~₹30k capital)
 5. Option Buying (Long Straddle) — ATM CE + PE buyer with risk capped (~₹30k capital)
 6. Classic Short Straddle — Naked ATM straddle seller (~₹2L margin per lot)
+7. Trend-Hedged Short Straddle — ATM straddle seller + one OTM wing on the side the market opened
 """
 
 from __future__ import annotations
@@ -142,6 +143,23 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "guard_rule": "Portfolio Target +₹15,000 / Stop -₹15,000",
         "description": "Institutional naked short straddle selling 10 Lots (650 CE / 650 PE) at 10:00 AM with 20% leg stop-losses, 15m re-entry, and ±₹15,000 portfolio guard.",
     },
+    "trend_hedged_straddle": {
+        "id": "trend_hedged_straddle",
+        "name": "Trend-Hedged Short Straddle",
+        "category": "Intraday Selling",
+        "badge": "One-Side Hedge",
+        "badge_color": "purple",
+        "default_capital": 150000.0,
+        "recommended_lots": 1,
+        "lot_size": 65,
+        "capital_per_lot": 150000.0,
+        "schedule": "10:00 AM IST (Mon–Fri)",
+        "exit_time": "3:25 PM IST",
+        "sl_rule": "20% leg SL on ATM CE & PE; one +300 OTM wing on the opening side",
+        "reentry_rule": "15-minute wait after SL hit, re-enters 1 lot straddle",
+        "guard_rule": "±10% portfolio guard up to ₹1L capital, else ±₹15,000",
+        "description": "Sells 1 lot ATM Call + ATM Put at 10:00 AM like the Classic Short Straddle, and buys one OTM wing on the side the market opened: market opens up (above yesterday's close) → buys a +300 Call; opens down → buys a −300 Put. The other side stays unhedged, so margin is close to a naked straddle (verify in your broker).",
+    },
 }
 
 
@@ -166,7 +184,7 @@ class UnifiedStrategyRunner:
 
     def run(self, hist_data: Dict[date, pd.DataFrame]) -> Dict[str, Any]:
         # If strategy is one of the 3 straddle modes, use NiftyStraddleEngine directly
-        if self.strategy_id in ("hedged_selling", "option_buying", "short_straddle"):
+        if self.strategy_id in ("hedged_selling", "option_buying", "short_straddle", "trend_hedged_straddle"):
             engine = NiftyStraddleEngine(
                 strategy_mode=self.strategy_id,
                 capital=float(self.params.get("capital", self.meta["default_capital"])),

@@ -7,6 +7,7 @@
     "nifty_gap_drive",
     "nifty_1pm_drop",
     "option_buying",
-    "short_straddle"
+    "short_straddle",
+    "trend_hedged_straddle"
   ]
 }

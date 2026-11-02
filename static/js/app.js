@@ -146,7 +146,8 @@ const STRATEGY_NAMES = {
     'nifty_gap_drive': '🚀 Gap Drive Momentum',
     'nifty_1pm_drop': '💥 1 PM Volatility Drop',
     'option_buying': '🎯 Long Straddle',
-    'short_straddle': '🏛️ Classic Straddle'
+    'short_straddle': '🏛️ Classic Straddle',
+    'trend_hedged_straddle': '🧭 Trend-Hedged Straddle'
 };
 
 function selectLiveStrategy(mode) {
@@ -1585,7 +1586,8 @@ function renderDashboard(results) {
         'nifty_gap_drive': 'Nifty Gap Drive Momentum',
         'nifty_1pm_drop': '1 PM Volatility Drop',
         'option_buying': 'Option Buying (Long Straddle)',
-        'short_straddle': 'Classic Short Straddle'
+        'short_straddle': 'Classic Short Straddle',
+        'trend_hedged_straddle': 'Trend-Hedged Short Straddle'
     };
     const modeText = results.strategy_name || stratNames[stMode] || stMode;
 
