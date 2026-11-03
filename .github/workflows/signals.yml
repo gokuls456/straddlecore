@@ -29,7 +29,7 @@ permissions:
   actions: write   # to start the next run in the chain
 
 concurrency:
-  group: signals
+  group: ${{ inputs.test && 'signals-test' || 'signals' }}   # test alerts don't wait behind the chain
   cancel-in-progress: false
 
 jobs:
