@@ -39,5 +39,46 @@
    }
   },
   "total": -2912.0
+ },
+ {
+  "date": "2026-11-03",
+  "strategies": {
+   "hedged_selling": {
+    "pnl": 0.0,
+    "status": "SKIPPED",
+    "note": "Missed: scanner started after 10:15"
+   },
+   "nifty_10_12_put": {
+    "pnl": 0.0,
+    "status": "SKIPPED",
+    "note": "Missed: scanner started after 10:25"
+   },
+   "nifty_gap_drive": {
+    "pnl": 0.0,
+    "status": "SKIPPED",
+    "note": "Missed: scanner started after 10:00"
+   },
+   "nifty_1pm_drop": {
+    "pnl": 0.0,
+    "status": "SKIPPED",
+    "note": "No trade: only 1 red candle(s) 12:45\u20131:15"
+   },
+   "option_buying": {
+    "pnl": 0.0,
+    "status": "SKIPPED",
+    "note": "Missed: scanner started after 10:15"
+   },
+   "short_straddle": {
+    "pnl": 0.0,
+    "status": "SKIPPED",
+    "note": "Missed: scanner started after 10:15"
+   },
+   "trend_hedged_straddle": {
+    "pnl": 0.0,
+    "status": "SKIPPED",
+    "note": "Missed: scanner started after 10:15"
+   }
+  },
+  "total": 0.0
  }
 ]

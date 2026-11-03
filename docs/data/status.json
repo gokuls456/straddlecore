@@ -12,7 +12,7 @@
   ]
  },
  "date": "2026-11-03",
- "last_tick": "15:20:51",
+ "last_tick": "15:30:55",
  "price_source": "INDstocks live",
  "quotes_error": "",
  "last_error": "",
@@ -79,7 +79,7 @@
   "week": -2912.0,
   "month": -2912.0,
   "all": -2912.0,
-  "days": 1,
+  "days": 2,
   "per_strategy": {
    "hedged_selling": 169.0,
    "nifty_10_12_put": 0.0,
@@ -90,5 +90,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-03 15:20:51 IST"
+ "updated_at": "2026-11-03 15:30:55 IST"
 }
