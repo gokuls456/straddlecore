@@ -1,71 +1,50 @@
 {
-  "date": "2026-11-02",
+  "date": "2026-11-03",
   "announced": true,
-  "summary_sent": true,
+  "summary_sent": false,
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "CLOSED",
-      "note": "Stop-loss hit on 23250 CE",
+      "status": "SKIPPED",
+      "note": "Missed: scanner started after 10:15",
       "trade": null,
-      "pnl": 169.0,
-      "events": [
-        "10:00 Entry @ NIFTY 23,310",
-        "13:16 Exit \u2212\u20b9266",
-        "13:32 Re-entry @ NIFTY 23,243",
-        "14:36 Exit +\u20b9436"
-      ],
-      "reentry_at": "2026-11-02T13:31:49.692301"
+      "pnl": 0.0,
+      "events": []
     },
     "nifty_10_12_put": {
       "status": "SKIPPED",
-      "note": "No trade: 10:05 candle green and above range mid 23,271",
+      "note": "Missed: scanner started after 10:25",
       "trade": null,
       "pnl": 0.0,
       "events": []
     },
     "nifty_gap_drive": {
-      "status": "CLOSED",
-      "note": "Stop-loss hit",
+      "status": "SKIPPED",
+      "note": "Missed: scanner started after 10:00",
       "trade": null,
-      "pnl": -1800.5,
-      "events": [
-        "09:47 Entry @ NIFTY 23,317",
-        "11:47 Exit \u2212\u20b91,800"
-      ]
+      "pnl": 0.0,
+      "events": []
     },
     "nifty_1pm_drop": {
-      "status": "CLOSED",
-      "note": "Trailing stop hit",
+      "status": "WAITING",
+      "note": "",
       "trade": null,
-      "pnl": 955.5,
-      "events": [
-        "13:20 Entry @ NIFTY 23,262",
-        "13:44 Exit +\u20b9956"
-      ]
+      "pnl": 0.0,
+      "events": []
     },
     "option_buying": {
-      "status": "CLOSED",
-      "note": "Time exit",
+      "status": "SKIPPED",
+      "note": "Missed: scanner started after 10:15",
       "trade": null,
-      "pnl": -2538.25,
-      "events": [
-        "10:00 Entry @ NIFTY 23,310",
-        "15:25 Exit \u2212\u20b92,538"
-      ]
+      "pnl": 0.0,
+      "events": []
     },
     "short_straddle": {
-      "status": "CLOSED",
-      "note": "Stop-loss hit on 23250 CE",
+      "status": "SKIPPED",
+      "note": "Missed: scanner started after 10:15",
       "trade": null,
-      "pnl": 302.25,
-      "events": [
-        "10:00 Entry @ NIFTY 23,310",
-        "13:16 Exit \u2212\u20b9618",
-        "13:32 Re-entry @ NIFTY 23,243",
-        "14:36 Exit +\u20b9920"
-      ],
-      "reentry_at": "2026-11-02T13:31:49.692301"
+      "pnl": 0.0,
+      "events": []
     },
     "trend_hedged_straddle": {
       "status": "SKIPPED",

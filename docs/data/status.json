@@ -11,9 +11,9 @@
    "trend_hedged_straddle"
   ]
  },
- "date": "2026-11-02",
- "last_tick": "",
- "price_source": "INDstocks (not connected yet)",
+ "date": "2026-11-03",
+ "last_tick": "12:51:19",
+ "price_source": "INDstocks live",
  "quotes_error": "",
  "last_error": "",
  "running": false,
@@ -21,49 +21,49 @@
   {
    "id": "hedged_selling",
    "name": "Iron Butterfly",
-   "status": "CLOSED",
-   "note": "Stop-loss hit on 23250 CE",
-   "pnl": 169.0,
+   "status": "SKIPPED",
+   "note": "Missed: scanner started after 10:15",
+   "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "nifty_10_12_put",
    "name": "10:12 Put",
    "status": "SKIPPED",
-   "note": "No trade: 10:05 candle green and above range mid 23,271",
+   "note": "Missed: scanner started after 10:25",
    "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "nifty_gap_drive",
    "name": "Gap Drive",
-   "status": "CLOSED",
-   "note": "Stop-loss hit",
-   "pnl": -1800.5,
+   "status": "SKIPPED",
+   "note": "Missed: scanner started after 10:00",
+   "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "nifty_1pm_drop",
    "name": "1 PM Drop",
-   "status": "CLOSED",
-   "note": "Trailing stop hit",
-   "pnl": 955.5,
+   "status": "WAITING",
+   "note": "",
+   "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "option_buying",
    "name": "Long Straddle",
-   "status": "CLOSED",
-   "note": "Time exit",
-   "pnl": -2538.25,
+   "status": "SKIPPED",
+   "note": "Missed: scanner started after 10:15",
+   "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "short_straddle",
    "name": "Short Straddle",
-   "status": "CLOSED",
-   "note": "Stop-loss hit on 23250 CE",
-   "pnl": 302.25,
+   "status": "SKIPPED",
+   "note": "Missed: scanner started after 10:15",
+   "pnl": 0.0,
    "open_trade": null
   },
   {
@@ -90,5 +90,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-02 22:18:19 IST"
+ "updated_at": "2026-11-03 12:51:19 IST"
 }
