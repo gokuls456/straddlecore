@@ -12,8 +12,8 @@
   ]
  },
  "date": "2026-11-03",
- "last_tick": "15:39:59",
- "price_source": "INDstocks live",
+ "last_tick": "",
+ "price_source": "INDstocks (not connected yet)",
  "quotes_error": "",
  "last_error": "",
  "running": false,
@@ -90,5 +90,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-03 15:40:29 IST"
+ "updated_at": "2026-11-03 16:34:17 IST"
 }
