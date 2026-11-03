@@ -2,12 +2,6 @@
   "enabled": true,
   "capital": 40000,
   "strategies": [
-    "hedged_selling",
-    "nifty_10_12_put",
-    "nifty_gap_drive",
-    "nifty_1pm_drop",
-    "option_buying",
-    "short_straddle",
-    "trend_hedged_straddle"
+    "hedged_selling"
   ]
 }
