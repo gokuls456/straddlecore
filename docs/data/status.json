@@ -12,7 +12,7 @@
   ]
  },
  "date": "2026-11-03",
- "last_tick": "13:11:27",
+ "last_tick": "13:20:01",
  "price_source": "INDstocks live",
  "quotes_error": "",
  "last_error": "",
@@ -45,8 +45,8 @@
   {
    "id": "nifty_1pm_drop",
    "name": "1 PM Drop",
-   "status": "WAITING",
-   "note": "",
+   "status": "SKIPPED",
+   "note": "No trade: only 1 red candle(s) 12:45\u20131:15",
    "pnl": 0.0,
    "open_trade": null
   },
@@ -90,5 +90,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-03 13:11:27 IST"
+ "updated_at": "2026-11-03 13:20:01 IST"
 }

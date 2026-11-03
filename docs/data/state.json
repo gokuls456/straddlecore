@@ -26,8 +26,8 @@
       "events": []
     },
     "nifty_1pm_drop": {
-      "status": "WAITING",
-      "note": "",
+      "status": "SKIPPED",
+      "note": "No trade: only 1 red candle(s) 12:45\u20131:15",
       "trade": null,
       "pnl": 0.0,
       "events": []
