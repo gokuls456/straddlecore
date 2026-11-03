@@ -1,24 +1,24 @@
 name: Strategy signals
 
-# Telegram alerts for all strategies, Mon–Fri. No orders are placed.
-# GitHub jobs are limited to 6 hours, so the market day is split into two runs.
-# Cron times are UTC (IST = UTC + 5:30). GitHub can start scheduled runs late or skip
-# them, so each half of the day has backup start times. Only one run is active at a time
-# (concurrency below); a duplicate that starts after its window simply exits.
+# Telegram alerts (strategies listed in signals_config.json), Mon–Fri. No orders are placed.
+# GitHub's cron starts runs hours late or skips them, so the runs form a chain instead: every
+# run either scans (morning until 12:15, afternoon until 15:40) or sleeps until the next
+# session (at most 5h15m), then starts the next run itself. The crons below only restart the
+# chain if it ever breaks. Concurrency keeps one run active plus at most one waiting, so extra
+# starts can't pile up. To stop everything: Actions → Strategy signals → ⋯ → Disable workflow.
+# Cron times are UTC (IST = UTC + 5:30).
 on:
   schedule:
-    - cron: "20 3 * * 1-5"   # 8:50 AM IST  morning run (until 12:15 PM)
-    - cron: "35 3 * * 1-5"   # 9:05 AM IST  backup
-    - cron: "50 3 * * 1-5"   # 9:20 AM IST  backup
-    - cron: "5 4 * * 1-5"    # 9:35 AM IST  backup
-    - cron: "30 6 * * 1-5"   # 12:00 PM IST afternoon run (until 3:40 PM), queued behind the morning run
-    - cron: "45 6 * * 1-5"   # 12:15 PM IST backup
-    - cron: "0 7 * * 1-5"    # 12:30 PM IST backup
+    - cron: "20 3 * * 1-5"   # 8:50 AM IST  chain restarts (only matter if the chain broke)
+    - cron: "35 3 * * 1-5"   # 9:05 AM IST
+    - cron: "50 3 * * 1-5"   # 9:20 AM IST
+    - cron: "30 6 * * 1-5"   # 12:00 PM IST
+    - cron: "0 13 * * *"     # 6:30 PM IST, daily, so the chain is back before the next morning
   workflow_dispatch:
     inputs:
       until:
-        description: "Stop at (IST, HH:MM)"
-        default: "15:40"
+        description: "Stop at (IST, HH:MM). Leave empty for automatic"
+        default: ""
       test:
         description: "Only send one test alert to Telegram"
         type: boolean
@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: write
+  actions: write   # to start the next run in the chain
 
 concurrency:
   group: signals
@@ -34,7 +35,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -62,11 +63,18 @@ jobs:
             python github_signals.py --test
             exit 0
           fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            UNTIL="${{ inputs.until }}"
-          elif [ "$(date +%H%M)" -lt 1200 ]; then
-            UNTIL="12:15"   # morning run (TZ is Asia/Kolkata)
+          if [ -n "${{ inputs.until }}" ]; then
+            python github_signals.py --until "${{ inputs.until }}"
           else
-            UNTIL="15:40"
+            python github_signals.py --auto
           fi
-          python github_signals.py --until "$UNTIL"
+      - name: Start the next run
+        if: always() && inputs.test != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in 1 2 3 4 5; do
+            gh workflow run signals.yml --repo "${{ github.repository }}" --ref main && exit 0
+            sleep 30
+          done
+          exit 1

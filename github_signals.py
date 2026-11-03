@@ -1,9 +1,14 @@
 """
 GitHub Actions runner for the strategy signal scanner (Telegram alerts only, no orders).
 
+    python github_signals.py --auto          (what the workflow runs)
     python github_signals.py --until 12:15
 
-Runs the scanner every 30 seconds until the given IST time, then exits. Settings come
+Runs the scanner every 30 seconds until the given IST time, then exits. With --auto it works
+out from the clock what to do: scan the morning (until 12:15) or the afternoon (until 15:40)
+on weekdays, otherwise sleep until the next session (at most MAX_SLEEP). The workflow then
+starts the next run itself, so the runs form an unbroken chain that does not depend on
+GitHub's unreliable cron. Settings come
 from signals_config.json; the Telegram bot token and chat ID come from the
 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID environment variables (GitHub secrets).
 
@@ -31,6 +36,10 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT, "docs", "data")
 SETTINGS_FILE = os.path.join(ROOT, "signals_config.json")
 COMMIT_EVERY = timedelta(minutes=10)
+FIRST_START = dtime(8, 50)       # scanner must be running before the 10:00 Iron Butterfly entry
+MORNING_END = dtime(12, 15)      # a GitHub job is capped at 6 h, so the day is two runs
+DAY_END = dtime(15, 40)
+MAX_SLEEP = timedelta(hours=5, minutes=15)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("github_signals")
@@ -150,6 +159,7 @@ def write_status(scanner: SignalScanner, now: datetime):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--until", default="15:40", help="IST time to stop, HH:MM")
+    parser.add_argument("--auto", action="store_true", help="decide from the clock: scan or sleep until the next session")
     parser.add_argument("--test", action="store_true", help="send one test alert and exit (works any time)")
     args = parser.parse_args()
     until = dtime.fromisoformat(args.until)
@@ -180,6 +190,47 @@ def main():
         log.info("Test alert sent.")
         return
 
+    if args.auto:
+        auto(send)
+    else:
+        scan(send, until)
+
+
+def scan_until(now: datetime):
+    """IST stop time for a scan starting now, or None outside market hours."""
+    if now.weekday() >= 5:
+        return None
+    if FIRST_START <= now.time() < MORNING_END:
+        return MORNING_END
+    if MORNING_END <= now.time() < DAY_END:
+        return DAY_END
+    return None
+
+
+def next_session(now: datetime, skip_today: bool = False) -> datetime:
+    d = now.date() + timedelta(days=1 if skip_today else 0)
+    while True:
+        start = datetime.combine(d, FIRST_START)
+        if d.weekday() < 5 and start > now:
+            return start
+        d += timedelta(days=1)
+
+
+def auto(send):
+    now = now_ist()
+    until = scan_until(now)
+    holiday = scan(send, until) if until else False
+    now = now_ist()
+    if scan_until(now) and not holiday:
+        return  # next session half starts right away
+    wake = next_session(now, skip_today=holiday)
+    pause = min(wake - now, MAX_SLEEP)
+    log.info("Market closed. Sleeping %s (next session %s); the next run is started after.", pause, wake)
+    time.sleep(max(0, pause.total_seconds()))
+
+
+def scan(send, until: dtime) -> bool:
+    """Scan until `until` (IST). Returns True if there is no market today (holiday)."""
     os.makedirs(DATA_DIR, exist_ok=True)
     scanner = SignalScanner(
         sender=send,
@@ -188,6 +239,7 @@ def main():
         config_loader=load_settings,
     )
 
+    holiday = False
     last_commit = now_ist()
     last_snapshot = None
     while True:
@@ -201,8 +253,9 @@ def main():
         write_status(scanner, now)
 
         # Holiday / no data by 9:45: nothing will happen today, so stop early.
-        if scanner.state.get("no_data_noted"):
+        if scanner.state.get("no_data_noted") and scanner.state.get("date") == now.date().isoformat():
             log.info("No NIFTY candles today (market holiday?). Exiting.")
+            holiday = True
             break
 
         # Commit right away when a strategy changes state (signal / exit), else every 10 minutes for live P&L.
@@ -216,6 +269,7 @@ def main():
     write_status(scanner, now_ist())
     commit_data(f"Signals update {now_ist().strftime('%d %b %H:%M')} (run end)")
     log.info("Done.")
+    return holiday
 
 
 if __name__ == "__main__":
