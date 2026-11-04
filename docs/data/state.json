@@ -1,54 +1,12 @@
 {
-  "date": "2026-11-03",
+  "date": "2026-11-04",
   "announced": true,
-  "summary_sent": true,
+  "summary_sent": false,
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "SKIPPED",
-      "note": "Missed: scanner started after 10:15",
-      "trade": null,
-      "pnl": 0.0,
-      "events": []
-    },
-    "nifty_10_12_put": {
-      "status": "SKIPPED",
-      "note": "Missed: scanner started after 10:25",
-      "trade": null,
-      "pnl": 0.0,
-      "events": []
-    },
-    "nifty_gap_drive": {
-      "status": "SKIPPED",
-      "note": "Missed: scanner started after 10:00",
-      "trade": null,
-      "pnl": 0.0,
-      "events": []
-    },
-    "nifty_1pm_drop": {
-      "status": "SKIPPED",
-      "note": "No trade: only 1 red candle(s) 12:45\u20131:15",
-      "trade": null,
-      "pnl": 0.0,
-      "events": []
-    },
-    "option_buying": {
-      "status": "SKIPPED",
-      "note": "Missed: scanner started after 10:15",
-      "trade": null,
-      "pnl": 0.0,
-      "events": []
-    },
-    "short_straddle": {
-      "status": "SKIPPED",
-      "note": "Missed: scanner started after 10:15",
-      "trade": null,
-      "pnl": 0.0,
-      "events": []
-    },
-    "trend_hedged_straddle": {
-      "status": "SKIPPED",
-      "note": "Missed: scanner started after 10:15",
+      "status": "WAITING",
+      "note": "",
       "trade": null,
       "pnl": 0.0,
       "events": []

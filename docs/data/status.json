@@ -5,66 +5,66 @@
    "hedged_selling"
   ]
  },
- "date": "2026-11-03",
- "last_tick": "",
+ "date": "2026-11-04",
+ "last_tick": "09:16:00",
  "price_source": "INDstocks (not connected yet)",
- "quotes_error": "",
+ "quotes_error": "INDstocks option chain was empty",
  "last_error": "",
  "running": false,
  "strategies": [
   {
    "id": "hedged_selling",
    "name": "Iron Butterfly",
-   "status": "SKIPPED",
-   "note": "Missed: scanner started after 10:15",
+   "status": "WAITING",
+   "note": "",
    "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "nifty_10_12_put",
    "name": "10:12 Put",
-   "status": "SKIPPED",
-   "note": "Missed: scanner started after 10:25",
+   "status": "\u2014",
+   "note": "",
    "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "nifty_gap_drive",
    "name": "Gap Drive",
-   "status": "SKIPPED",
-   "note": "Missed: scanner started after 10:00",
+   "status": "\u2014",
+   "note": "",
    "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "nifty_1pm_drop",
    "name": "1 PM Drop",
-   "status": "SKIPPED",
-   "note": "No trade: only 1 red candle(s) 12:45\u20131:15",
+   "status": "\u2014",
+   "note": "",
    "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "option_buying",
    "name": "Long Straddle",
-   "status": "SKIPPED",
-   "note": "Missed: scanner started after 10:15",
+   "status": "\u2014",
+   "note": "",
    "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "short_straddle",
    "name": "Short Straddle",
-   "status": "SKIPPED",
-   "note": "Missed: scanner started after 10:15",
+   "status": "\u2014",
+   "note": "",
    "pnl": 0.0,
    "open_trade": null
   },
   {
    "id": "trend_hedged_straddle",
    "name": "Trend Straddle",
-   "status": "SKIPPED",
-   "note": "Missed: scanner started after 10:15",
+   "status": "\u2014",
+   "note": "",
    "pnl": 0.0,
    "open_trade": null
   }
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-04 09:10:29 IST"
+ "updated_at": "2026-11-04 09:16:00 IST"
 }
