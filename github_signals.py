@@ -216,13 +216,25 @@ def next_session(now: datetime, skip_today: bool = False) -> datetime:
         d += timedelta(days=1)
 
 
+def no_market_today(now: datetime) -> bool:
+    """True when an earlier run today already found no NIFTY candles (holiday)."""
+    try:
+        with open(os.path.join(DATA_DIR, "state.json")) as f:
+            st = json.load(f)
+    except Exception:
+        return False
+    return st.get("date") == now.date().isoformat() and bool(st.get("no_data_noted"))
+
+
 def auto(send):
+    """One link of the chain: scan this half of the day, or sleep. Never both, so a run
+    stays well inside GitHub's 6-hour job limit; the next run picks up from there."""
     now = now_ist()
     until = scan_until(now)
-    holiday = scan(send, until) if until else False
-    now = now_ist()
-    if scan_until(now) and not holiday:
-        return  # next session half starts right away
+    holiday = bool(until) and no_market_today(now)
+    if until and not holiday:
+        scan(send, until)
+        return
     wake = next_session(now, skip_today=holiday)
     pause = min(wake - now, MAX_SLEEP)
     log.info("Market closed. Sleeping %s (next session %s); the next run is started after.", pause, wake)
