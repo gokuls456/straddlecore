@@ -6,7 +6,7 @@
   ]
  },
  "date": "2026-11-05",
- "last_tick": "11:01:04",
+ "last_tick": "11:11:10",
  "price_source": "INDstocks (not connected yet)",
  "quotes_error": "INDstocks option chain was empty",
  "last_error": "",
@@ -17,7 +17,7 @@
    "name": "Iron Butterfly",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": 122.85,
+   "pnl": 144.95,
    "open_trade": {
     "kind": "seller",
     "legs": [
@@ -28,7 +28,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 79.57,
-      "cur": 67.46,
+      "cur": 67.85,
       "high": 81.05,
       "sl": null,
       "live": false
@@ -40,7 +40,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 64.37,
-      "cur": 68.2,
+      "cur": 66.47,
       "high": 77.36,
       "sl": null,
       "live": false
@@ -52,7 +52,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 197.26,
-      "cur": 176.74,
+      "cur": 178.02,
       "high": 199.84,
       "sl": 236.71,
       "live": false
@@ -64,7 +64,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 171.36,
-      "cur": 181.71,
+      "cur": 178.75,
       "high": 197.57,
       "sl": 205.63,
       "live": false
@@ -143,5 +143,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-05 11:01:04 IST"
+ "updated_at": "2026-11-05 11:11:10 IST"
 }
