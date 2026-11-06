@@ -271,7 +271,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Nifty Dynamic SL Setup Backtester")
     parser.add_argument("--start", type=str, help="Start date (YYYY-MM-DD)", default=(datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
     parser.add_argument("--end", type=str, help="End date (YYYY-MM-DD)", default=datetime.now().strftime('%Y-%m-%d'))
-    parser.add_argument("--real", action="store_true", help="Fetch real Nifty data using tvDatafeed")
+    parser.add_argument("--real", action="store_true", help="Fetch real NIFTY 3-min candles from Dhan (needs Dhan keys + Data API plan)")
     args = parser.parse_args()
 
     start_dt = datetime.strptime(args.start, "%Y-%m-%d")
@@ -280,30 +280,18 @@ if __name__ == "__main__":
     hist_data = pd.DataFrame()
 
     if args.real:
-        print(f"\n{Colors.YELLOW}Attempting to fetch real 3-minute market data via TradingView from {args.start} to {args.end}...{Colors.RESET}")
+        print(f"\n{Colors.YELLOW}Fetching real 3-minute NIFTY candles from Dhan for {args.start} to {args.end}...{Colors.RESET}")
         try:
-            from tvDatafeed import TvDatafeed, Interval
-            import logging
-            logging.getLogger('tvDatafeed').setLevel(logging.CRITICAL)
-            
-            tv = TvDatafeed()
-            raw_data = tv.get_hist(symbol='NIFTY', exchange='NSE', interval=Interval.in_3_minute, n_bars=5000)
-            
-            if raw_data is not None and not raw_data.empty:
-                mask = (raw_data.index >= args.start) & (raw_data.index <= args.end + " 23:59:59")
-                hist_data = raw_data.loc[mask].copy()
-                
-                if not hist_data.empty:
-                    hist_data.drop(columns=['symbol', 'volume'], inplace=True, errors='ignore')
-                    print(f"{Colors.GREEN}Successfully fetched {len(hist_data)} real 3-min candles directly from TradingView!{Colors.RESET}")
-                else:
-                    print(f"{Colors.RED}Data for {args.start} to {args.end} is out of range. Falling back to dummy data...{Colors.RESET}")
-                    hist_data = pd.DataFrame()
+            from engine.dhan_client import nifty_candles
+
+            hist_data = nifty_candles(args.start, args.end, minutes=3)
+            if hist_data.empty:
+                print(f"{Colors.RED}Dhan returned no candles for {args.start} to {args.end}. Falling back to dummy data...{Colors.RESET}")
             else:
-                print(f"{Colors.RED}Failed to fetch data from TradingView. Falling back to dummy data...{Colors.RESET}")
-                
+                print(f"{Colors.GREEN}Fetched {len(hist_data)} real 3-min candles from Dhan.{Colors.RESET}")
         except Exception as e:
-            print(f"{Colors.RED}Error fetching real data: {e}. Falling back to dummy data...{Colors.RESET}")
+            print(f"{Colors.RED}Error fetching Dhan data: {e}. Falling back to dummy data...{Colors.RESET}")
+            hist_data = pd.DataFrame()
 
     if hist_data.empty:
         print(f"\n{Colors.YELLOW}Generating synthetic trend data from {args.start} to {args.end}...{Colors.RESET}")

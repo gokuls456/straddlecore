@@ -17,15 +17,16 @@ from flask import Flask, render_template, request, jsonify, Response, send_file
 import pandas as pd
 import numpy as np
 
-# Suppress yfinance / pandas deprecation noise
+# Suppress pandas deprecation noise
 warnings.filterwarnings('ignore')
 
 from engine.data_feed import NiftyDataFeed
+from engine.gold_feed import GoldMiniFeed
 from engine.straddle_engine import NiftyStraddleEngine
 from engine.strategy_registry import list_strategies, get_strategy, UnifiedStrategyRunner
 from engine.live_runner import algo_runner
-from engine.groww_broker import GrowwBroker
 from engine.dhan_broker import DhanBroker
+from engine.dhan_client import dhan_credentials
 from engine import telegram_notifier as tg
 from engine.signal_scanner import signal_scanner, ALL_STRATEGIES
 
@@ -34,6 +35,7 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 data_feed = NiftyDataFeed()
+gold_feed = GoldMiniFeed()
 
 # In-memory store of last backtest results for quick day inspection & export
 LATEST_BACKTEST_RESULTS = {}
@@ -43,24 +45,18 @@ BROKER_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "cache", "broker_co
 DEFAULT_CAPITAL = 30000.0
 
 
+DHAN_SECRETS = ("access_token", "pin", "totp_secret")
+
+
 def default_broker_config():
     return {
-        "broker": "groww",
+        "broker": "dhan",
         "account_type": "demo",
         "demo_balance": DEFAULT_CAPITAL,
         "original_balance": DEFAULT_CAPITAL,
-        # Original account: "full" uses all available Groww funds, "custom" uses allocated_capital.
+        # Original account: "full" uses all available Dhan funds, "custom" uses allocated_capital.
         "allocation_mode": "custom",
         "allocated_capital": DEFAULT_CAPITAL,
-        "groww": {
-            "client_id": "",
-            "api_key": "",
-            "api_secret": "",
-            "auth_token": "",
-            "access_token": "",
-            "mode": "paper",
-            "is_connected": False,
-        },
         # Telegram alerts when any strategy's entry/exit condition hits (no orders).
         "signals": {
             "enabled": True,
@@ -72,16 +68,13 @@ def default_broker_config():
             "chat_name": "",
             "enabled": False,
         },
+        # The only broker and market-data source. Either a pasted access token (24 h) or
+        # PIN + TOTP secret for automatic daily login.
         "dhan": {
             "client_id": "",
             "access_token": "",
-            "is_connected": False,
-        },
-        "kite": {
-            "api_key": "",
-            "api_secret": "",
-            "access_token": "",
-            "mode": "paper",
+            "pin": "",
+            "totp_secret": "",
             "is_connected": False,
         },
     }
@@ -93,17 +86,12 @@ def load_broker_config():
         try:
             with open(BROKER_CONFIG_FILE, "r") as f:
                 saved = json.load(f)
-            cfg.update({k: v for k, v in saved.items() if k not in ("groww", "kite", "dhan", "telegram", "signals")})
-            if isinstance(saved.get("signals"), dict):
-                cfg["signals"].update(saved["signals"])
-            if isinstance(saved.get("telegram"), dict):
-                cfg["telegram"].update(saved["telegram"])
-            if isinstance(saved.get("dhan"), dict):
-                cfg["dhan"].update(saved["dhan"])
-            if isinstance(saved.get("groww"), dict):
-                cfg["groww"].update(saved["groww"])
-            if isinstance(saved.get("kite"), dict):
-                cfg["kite"].update(saved["kite"])
+            # Old broker sections (groww, kite, indstocks) are dropped: Dhan is the only broker.
+            cfg.update({k: v for k, v in saved.items()
+                        if k not in ("groww", "kite", "indstocks", "dhan", "telegram", "signals", "broker")})
+            for section in ("signals", "telegram", "dhan"):
+                if isinstance(saved.get(section), dict):
+                    cfg[section].update(saved[section])
         except Exception:
             pass
     if not cfg.get("demo_balance"):
@@ -114,22 +102,14 @@ def load_broker_config():
 
 
 def public_broker_config(cfg):
-    """Return config for the UI without leaking full secrets."""
+    """Return config for the UI without leaking secrets."""
     out = json.loads(json.dumps(cfg))
-    groww = out.get("groww", {})
-    key = groww.get("api_key") or ""
-    secret = groww.get("api_secret") or groww.get("auth_token") or ""
-    groww["has_api_key"] = bool(key)
-    groww["has_api_secret"] = bool(secret)
-    groww["api_key_masked"] = (key[:8] + "…" + key[-6:]) if len(key) > 16 else ("saved" if key else "")
-    # Secrets never leave the server; blank fields on save keep the stored values.
-    for secret_key in ("api_key", "api_secret", "auth_token", "access_token"):
-        groww[secret_key] = ""
-    out["groww"] = groww
     dhan = out.get("dhan", {})
-    token = dhan.get("access_token") or ""
-    dhan["has_access_token"] = bool(token)
-    dhan["access_token"] = ""
+    dhan["has_access_token"] = bool(dhan.get("access_token"))
+    dhan["has_auto_login"] = bool(dhan.get("pin") and dhan.get("totp_secret"))
+    # Secrets never leave the server; blank fields on save keep the stored values.
+    for secret_key in DHAN_SECRETS:
+        dhan[secret_key] = ""
     out["dhan"] = dhan
     out["telegram"] = public_telegram_config(cfg)
     return out
@@ -142,14 +122,8 @@ def public_telegram_config(cfg):
 
 
 def live_broker(cfg):
-    """Broker for the Original account's balance: Dhan or Groww, per cfg["broker"]."""
-    if cfg.get("broker") == "dhan":
-        return DhanBroker(cfg["dhan"].get("client_id") or "", cfg["dhan"].get("access_token") or "")
-    return GrowwBroker(
-        api_key=cfg["groww"].get("api_key") or "",
-        api_secret=cfg["groww"].get("api_secret") or cfg["groww"].get("auth_token") or "",
-        access_token=cfg["groww"].get("access_token") or "",
-    )
+    """Broker for the Original account's balance (Dhan)."""
+    return DhanBroker(**dhan_credentials(cfg))
 
 
 def save_broker_config(cfg):
@@ -168,24 +142,19 @@ def broker_config_endpoint():
         cfg = load_broker_config()
         if (data.get("account_type") not in (None, cfg.get("account_type"))) and algo_runner.is_running:
             return jsonify({"success": False, "error": "Stop the algo before switching accounts."}), 409
-        broker = data.get("broker", cfg.get("broker", "groww"))
-        cfg["broker"] = broker
+        cfg["broker"] = "dhan"
         if data.get("account_type") in ("demo",):  # "original" disabled for now
             cfg["account_type"] = data["account_type"]
         if data.get("demo_balance"):
             cfg["demo_balance"] = float(data["demo_balance"])
-        if broker in cfg and data.get(broker):
-            incoming = data.get(broker, {})
+        if isinstance(data.get("dhan"), dict):
+            incoming = {k: str(v).strip() for k, v in data["dhan"].items() if k in ("client_id",) + DHAN_SECRETS}
             # Keep previously saved secrets if the UI sent blanks.
-            for secret_key in ("api_key", "api_secret", "auth_token", "access_token"):
-                if not str(incoming.get(secret_key) or "").strip():
+            for secret_key in DHAN_SECRETS:
+                if not incoming.get(secret_key):
                     incoming.pop(secret_key, None)
-            cfg[broker].update(incoming)
-            if cfg["account_type"] == "original":
-                cfg[broker]["mode"] = "live"
-            else:
-                cfg[broker]["mode"] = "paper"
-            cfg[broker]["last_connected_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cfg["dhan"].update(incoming)
+            cfg["dhan"]["last_connected_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         save_broker_config(cfg)
         return jsonify({"success": True, "data": public_broker_config(cfg)})
     else:
@@ -194,99 +163,54 @@ def broker_config_endpoint():
 @app.route("/api/broker/test", methods=["POST"])
 def broker_test_endpoint():
     data = request.get_json() or {}
-    broker = data.get("broker", "groww")
     creds = data.get("credentials", {})
     cfg = load_broker_config()
+    if data.get("broker", "dhan") != "dhan":
+        return jsonify({"success": False, "error": "Only Dhan is supported."}), 400
 
-    if broker == "groww":
-        api_key = (creds.get("api_key") or cfg["groww"].get("api_key") or "").strip()
-        api_secret = (creds.get("api_secret") or creds.get("auth_token") or cfg["groww"].get("api_secret") or cfg["groww"].get("auth_token") or "").strip()
-        if not api_key or not api_secret:
-            return jsonify({"success": False, "error": "Groww API key and API secret are required for the original account."}), 400
+    d = {"client_id": (creds.get("client_id") or cfg["dhan"].get("client_id") or "").strip()}
+    for key in DHAN_SECRETS:
+        d[key] = (creds.get(key) or "").strip()
+    # A freshly pasted token replaces saved auto-login, and vice versa; blanks keep what is saved.
+    if not d["access_token"] and not (d["pin"] and d["totp_secret"]):
+        for key in DHAN_SECRETS:
+            d[key] = cfg["dhan"].get(key) or ""
+    elif d["access_token"] and not (d["pin"] and d["totp_secret"]):
+        d["pin"] = d["totp_secret"] = ""
+    elif not d["access_token"]:
+        d["access_token"] = ""
+    if not d["client_id"] or not (d["access_token"] or (d["pin"] and d["totp_secret"])):
+        return jsonify({"success": False, "error": "Dhan Client ID plus an access token (or PIN + TOTP secret) are required."}), 400
 
-        started = datetime.now()
-        gw = GrowwBroker(api_key=api_key, api_secret=api_secret)
-        ok, msg = gw.connect()
-        if not ok:
-            return jsonify({"success": False, "error": msg}), 400
-        funds = gw.get_balance()
-        latency_ms = int((datetime.now() - started).total_seconds() * 1000)
-        balance = funds.get("balance") or 0.0
-
-        cfg["broker"] = "groww"
-        cfg["original_balance"] = balance or cfg.get("original_balance", DEFAULT_CAPITAL)
-        cfg["groww"].update({
-            "api_key": api_key,
-            "api_secret": api_secret,
-            "auth_token": api_secret,
-            "access_token": gw.access_token,
-            "mode": "live",
-            "is_connected": True,
-            "last_connected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        })
-        save_broker_config(cfg)
-        return jsonify({
-            "success": True,
-            "broker": "Groww Trading API",
-            "mode": "LIVE",
-            "status": "CONNECTED",
-            "balance": balance,
-            "message": msg + (f" Available funds ₹{balance:,.2f}." if balance else ""),
-            "latency_ms": latency_ms,
-            "data": public_broker_config(cfg),
-        })
-    elif broker == "dhan":
-        client_id = (creds.get("client_id") or cfg["dhan"].get("client_id") or "").strip()
-        token = (creds.get("access_token") or cfg["dhan"].get("access_token") or "").strip()
-        if not client_id or not token:
-            return jsonify({"success": False, "error": "Dhan client ID and access token are required."}), 400
-        started = datetime.now()
-        dh = DhanBroker(client_id, token)
-        ok, msg = dh.connect()
-        if not ok:
-            return jsonify({"success": False, "error": msg}), 400
-        funds = dh.get_balance()
-        latency_ms = int((datetime.now() - started).total_seconds() * 1000)
-        balance = funds.get("balance") or 0.0
-        cfg["broker"] = "dhan"
-        cfg["dhan"].update({
-            "client_id": client_id,
-            "access_token": token,
-            "is_connected": True,
-            "token_validity": funds.get("token_validity", ""),
-            "last_connected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        })
-        save_broker_config(cfg)
-        warn = " ".join(funds.get("warnings") or [])
-        return jsonify({
-            "success": True,
-            "broker": "Dhan",
-            "mode": "LIVE",
-            "status": "CONNECTED",
-            "balance": balance,
-            "message": f"{msg} Available funds ₹{balance:,.2f}." + (f" {warn}" if warn else ""),
-            "latency_ms": latency_ms,
-            "data": public_broker_config(cfg),
-        })
-    elif broker == "kite":
-        api_key = creds.get("api_key", "").strip()
-        if not api_key:
-            return jsonify({"success": False, "error": "Zerodha Kite Connect API Key is required."}), 400
-        cfg["broker"] = "kite"
-        cfg["kite"].update(creds)
-        cfg["kite"]["is_connected"] = True
-        cfg["kite"]["last_connected_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        save_broker_config(cfg)
-        return jsonify({
-            "success": True,
-            "broker": "Zerodha Kite Connect v3",
-            "mode": creds.get("mode", "paper").upper(),
-            "status": "CONNECTED",
-            "message": "Kite credentials saved.",
-            "latency_ms": 19
-        })
-    else:
-        return jsonify({"success": False, "error": f"Unsupported broker: {broker}"}), 400
+    started = datetime.now()
+    dh = DhanBroker(**d)
+    ok, msg = dh.connect()
+    if not ok:
+        return jsonify({"success": False, "error": msg}), 400
+    funds = dh.get_balance()
+    latency_ms = int((datetime.now() - started).total_seconds() * 1000)
+    balance = funds.get("balance") or 0.0
+    cfg["broker"] = "dhan"
+    cfg["dhan"].update(d)
+    cfg["dhan"].update({
+        "is_connected": True,
+        "token_validity": funds.get("token_validity", ""),
+        "data_plan": funds.get("data_plan", ""),
+        "last_connected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    save_broker_config(cfg)
+    warn = " ".join(funds.get("warnings") or [])
+    return jsonify({
+        "success": True,
+        "broker": "Dhan",
+        "mode": "LIVE",
+        "status": "CONNECTED",
+        "balance": balance,
+        "data_plan": funds.get("data_plan", ""),
+        "message": f"{msg} Available funds ₹{balance:,.2f}." + (f" {warn}" if warn else ""),
+        "latency_ms": latency_ms,
+        "data": public_broker_config(cfg),
+    })
 
 
 @app.route("/api/telegram/config", methods=["GET", "POST"])
@@ -388,7 +312,7 @@ def broker_balance_endpoint():
             "balance": live_bal or float(cfg.get("original_balance", DEFAULT_CAPITAL)),
             "allocated_capital": custom_alloc,
             "allocation_mode": alloc_mode,
-            "error": funds.get("error") or f"Could not fetch {cfg.get('broker', 'groww').title()} funds.",
+            "error": funds.get("error") or "Could not fetch Dhan funds.",
         }), 400
     cfg["original_balance"] = live_bal
     save_broker_config(cfg)
@@ -400,7 +324,7 @@ def broker_balance_endpoint():
         "allocated_capital": round(allocated, 2),
         "allocation_mode": alloc_mode,
         "custom_capital": custom_alloc,
-        "broker": cfg.get("broker", "groww"),
+        "broker": "dhan",
         "label": funds.get("profile_name") or "Live funds",
         "ucc": funds.get("ucc") or "",
         "active_segments": funds.get("active_segments") or [],
@@ -440,7 +364,7 @@ def demo_funds_endpoint():
 
 @app.route("/api/algo/capital", methods=["POST"])
 def algo_capital_endpoint():
-    """Set how much of the Original (Groww) account the algo may use: full funds or a custom amount."""
+    """Set how much of the Original (Dhan) account the algo may use: full funds or a custom amount."""
     data = request.get_json() or {}
     mode = data.get("mode", "custom")
     if mode not in ("full", "custom"):
@@ -518,10 +442,17 @@ def run_backtest_api():
         pl_stop = float(params["pl_stop"]) if "pl_stop" in params and params["pl_stop"] not in (None, "") else None
 
         # Fetch data
-        hist_data = data_feed.get_historical_intraday_data(
-            period=period, 
-            exclude_last_30=exclude_last_30
-        )
+        if strategy_mode == "gold_trend_futures":
+            # The lots/lot-size config is shared with the NIFTY strategies; Gold Mini is sized
+            # from capital (≈₹1.5L margin per 100 g lot) so it never exceeds the account.
+            initial_lots = max(1, int(capital // get_strategy("gold_trend_futures")["capital_per_lot"]))
+            lot_size = 100
+            hist_data = gold_feed.get_historical_intraday_data(period=period)
+        else:
+            hist_data = data_feed.get_historical_intraday_data(
+                period=period,
+                exclude_last_30=exclude_last_30
+            )
         
         if not hist_data:
             return jsonify({"success": False, "error": "No historical data available for the selected period."}), 400

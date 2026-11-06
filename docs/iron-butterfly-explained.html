@@ -1,0 +1,220 @@
+<title>StraddleCore Iron Butterfly</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column, a trade-ticket style rule list, a payoff chart and a results table */
+:root {
+  --bg: #f4f6f7;
+  --surface: #ffffff;
+  --ink: #15232b;
+  --muted: #5b6b73;
+  --line: #d9e0e3;
+  --accent: #0e7a6b;
+  --accent-soft: #dcefeb;
+  --loss: #c2412d;
+  --loss-soft: #f6e1dc;
+  --warn: #9a6a00;
+  --warn-soft: #f5ecd3;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f171b; --surface: #162228; --ink: #e4ecef; --muted: #93a4ab; --line: #2a3a41;
+    --accent: #3fc1aa; --accent-soft: #143a35; --loss: #f07a63; --loss-soft: #3d1f19;
+    --warn: #e2b44a; --warn-soft: #3a2f12; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f171b; --surface: #162228; --ink: #e4ecef; --muted: #93a4ab; --line: #2a3a41;
+  --accent: #3fc1aa; --accent-soft: #143a35; --loss: #f07a63; --loss-soft: #3d1f19;
+  --warn: #e2b44a; --warn-soft: #3a2f12; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); }
+.wrap {
+  max-width: 760px; margin: 0 auto;
+  padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 44px;
+}
+h1, h2 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2rem, 6vw, 2.9rem); font-weight: 800; letter-spacing: -0.01em; }
+h2 { font-size: 1.35rem; font-weight: 600; }
+p { margin: 0; max-width: 65ch; }
+section { display: grid; gap: 14px; min-width: 0; }
+.eyebrow { font: 500 0.75rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lede { font-size: 1.1rem; color: var(--muted); }
+.muted { color: var(--muted); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* Trade ticket: the rules in the order they happen during the day */
+.ticket { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.ticket ol { list-style: none; margin: 0; padding: 0; }
+.ticket li { display: grid; grid-template-columns: 5.5rem 1fr; gap: 16px; padding: 14px 18px; border-top: 1px solid var(--line); }
+.ticket li:first-child { border-top: 0; }
+.ticket .t { font: 500 0.9rem var(--mono); color: var(--accent); padding-top: 2px; }
+.ticket b { display: block; }
+.ticket span.d { color: var(--muted); font-size: 0.95rem; }
+@media (max-width: 460px) { .ticket li { grid-template-columns: 1fr; gap: 2px; } }
+
+.legs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.leg { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--surface); display: grid; gap: 2px; }
+.leg .k { font: 500 0.72rem var(--mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.leg.sell .k { color: var(--loss); }
+.leg.buy .k { color: var(--accent); }
+.leg .v { font-weight: 600; }
+
+.chart { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 12px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 480px; height: auto; }
+.chart text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.fact { padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--surface); display: grid; gap: 2px; }
+.fact .v { font: 600 1.25rem var(--mono); font-variant-numeric: tabular-nums; }
+.fact .k { font-size: 0.85rem; color: var(--muted); }
+
+.table { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 0.95rem; }
+th, td { padding: 10px 12px; text-align: right; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+th { border-top: 0; font: 500 0.75rem var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+th:first-child, td:first-child { text-align: left; }
+td.pos { color: var(--accent); font-family: var(--mono); }
+td .tag { display: inline-block; font: 500 0.7rem var(--mono); padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; }
+.tag.real { background: var(--accent-soft); color: var(--accent); }
+.tag.sim { background: var(--warn-soft); color: var(--warn); }
+
+.note { padding: 14px 16px; border-radius: 8px; background: var(--warn-soft); color: var(--ink); display: grid; gap: 6px; }
+.note b { color: var(--warn); }
+ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: 8px; max-width: 65ch; }
+footer { font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:12px">
+    <div class="eyebrow">NIFTY 50 weekly options · intraday</div>
+    <h1>StraddleCore Iron Butterfly</h1>
+    <p class="lede">A hedged option-selling trade on NIFTY that opens at 10:00 AM and closes by 3:25 PM the same day. We built a backtester for it and a bot that sends every step to Telegram. The bot only sends alerts; it never places orders.</p>
+  </header>
+
+  <section>
+    <div class="eyebrow">The idea</div>
+    <h2>Get paid for a quiet day, with a cap on the bad ones</h2>
+    <p>Option prices shrink through the day when the market doesn't move much. Selling the at-the-money call and put collects that premium. On its own that is risky, because a big move can cause a large loss. So we also buy two cheap options 300 points away on each side. Those "wings" put a ceiling on the loss and cut the margin from about ₹2.1 lakh to about ₹91,000 per lot.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">The four legs, one lot each (65 qty)</div>
+    <div class="legs">
+      <div class="leg sell"><span class="k">Sell</span><span class="v">ATM Call</span><span class="muted num">e.g. 23300 CE</span></div>
+      <div class="leg sell"><span class="k">Sell</span><span class="v">ATM Put</span><span class="muted num">e.g. 23300 PE</span></div>
+      <div class="leg buy"><span class="k">Buy</span><span class="v">Call wing +300</span><span class="muted num">e.g. 23600 CE</span></div>
+      <div class="leg buy"><span class="k">Buy</span><span class="v">Put wing −300</span><span class="muted num">e.g. 23000 PE</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">The rules, in the order they happen</div>
+    <h2>One trading day</h2>
+    <div class="ticket">
+      <ol>
+        <li><span class="t">10:00</span><div><b>Enter</b><span class="d">Sell the ATM call and put on the current weekly expiry, buy the ±300 wings.</span></div></li>
+        <li><span class="t">all day</span><div><b>Stop-loss 20% per short leg</b><span class="d">If the sold call or put rises 20% above its entry price, close all positions.</span></div></li>
+        <li><span class="t">+15 min</span><div><b>Re-enter once</b><span class="d">Wait 15 minutes, then sell a fresh ATM straddle at the new price, with a wider 40% stop-loss.</span></div></li>
+        <li><span class="t">every 10 s</span><div><b>Portfolio guard</b><span class="d">If total profit or loss for the day reaches ±10% of capital, close everything.</span></div></li>
+        <li><span class="t">15:25</span><div><b>Exit</b><span class="d">Close whatever is still open. Nothing is carried overnight.</span></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Shape of the trade</div>
+    <h2>Profit is highest when NIFTY stays near the strike</h2>
+    <div class="chart" role="img" aria-label="Iron butterfly payoff at expiry for one lot: peak profit of about 15,600 rupees at the 23300 strike, breakeven near 23060 and 23540, and a flat maximum loss of about 3,900 rupees beyond 23000 and 23600.">
+      <svg viewBox="0 0 640 290" xmlns="http://www.w3.org/2000/svg">
+        <g stroke="var(--line)" stroke-width="1">
+          <line x1="60" y1="41.8" x2="620" y2="41.8"/>
+          <line x1="60" y1="96.4" x2="620" y2="96.4"/>
+          <line x1="60" y1="150.9" x2="620" y2="150.9"/>
+          <line x1="60" y1="260" x2="620" y2="260"/>
+        </g>
+        <polygon points="172,205.5 340,35.3 508,205.5" fill="var(--accent-soft)"/>
+        <polygon points="60,205.5 60,248 130,248 172,205.5" fill="var(--loss-soft)"/>
+        <polygon points="508,205.5 550,248 620,248 620,205.5" fill="var(--loss-soft)"/>
+        <line x1="60" y1="205.5" x2="620" y2="205.5" stroke="var(--muted)" stroke-width="1"/>
+        <polyline points="60,248 130,248 340,35.3 550,248 620,248" fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-linejoin="round"/>
+        <circle cx="340" cy="35.3" r="4" fill="var(--accent)"/>
+        <text x="350" y="32">+₹15,600 max</text>
+        <text x="472" y="244" text-anchor="end">−₹3,900 max</text>
+        <text x="52" y="45.8" text-anchor="end">15k</text>
+        <text x="52" y="100.4" text-anchor="end">10k</text>
+        <text x="52" y="154.9" text-anchor="end">5k</text>
+        <text x="52" y="209.5" text-anchor="end">0</text>
+        <text x="52" y="264" text-anchor="end">−5k</text>
+        <text x="130" y="280" text-anchor="middle">23000</text>
+        <text x="340" y="280" text-anchor="middle">23300</text>
+        <text x="550" y="280" text-anchor="middle">23600</text>
+        <text x="172" y="222" text-anchor="middle">23060</text>
+        <text x="508" y="222" text-anchor="middle">23540</text>
+      </svg>
+    </div>
+    <p class="muted" style="font-size:0.9rem">Example for one lot with a net credit of ₹240 (premium sold minus wings bought). This is the value at expiry, which shows the most the trade can make or lose. We exit the same afternoon, so a real day ends somewhere inside this shape, usually much closer to zero, and the stop-loss usually cuts losses well before the ₹3,900 floor.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">What one lot needs</div>
+    <div class="facts">
+      <div class="fact"><span class="v">₹91,048</span><span class="k">margin per lot with wings (broker margin calculator, 4 Nov 2026)</span></div>
+      <div class="fact"><span class="v">₹2,14,409</span><span class="k">margin without wings, for comparison</span></div>
+      <div class="fact"><span class="v">65</span><span class="k">quantity per lot</span></div>
+      <div class="fact"><span class="v">~₹360</span><span class="k">charges per day (brokerage, STT, GST)</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Backtest · 1 lot · ₹1,00,000 capital · after charges</div>
+    <h2>Results, and how far to trust them</h2>
+    <div class="table">
+      <table>
+        <thead><tr><th>Period</th><th>Days</th><th>Net P&amp;L</th><th>Win days</th><th>Profit factor</th><th>Worst day</th><th>Max drawdown</th></tr></thead>
+        <tbody>
+          <tr><td>1 month <span class="tag real">real candles</span></td><td class="num">22</td><td class="pos">+₹8,439 <span class="muted">(8.4%)</span></td><td class="num">59%</td><td class="num">1.95</td><td class="num">−₹1,702</td><td class="num">−₹5,781</td></tr>
+          <tr><td>3 months <span class="tag sim">⅔ simulated</span></td><td class="num">62</td><td class="pos">+₹60,076 <span class="muted">(60%)</span></td><td class="num">82%</td><td class="num">6.89</td><td class="num">−₹1,702</td><td class="num">−₹5,781</td></tr>
+          <tr><td>1 year <span class="tag sim">mostly simulated</span></td><td class="num">247</td><td class="pos">+₹2,76,039 <span class="muted">(276%)</span></td><td class="num">87%</td><td class="num">15.6</td><td class="num">−₹1,702</td><td class="num">−₹5,781</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p><b>Trust the 1-month row most.</b> Free 5-minute NIFTY data only goes back about 60 days. Days before that are filled with simulated price paths that match each day's real open, high, low and close but move more smoothly than the real market. That suits a selling strategy, so longer periods look better than they really were: real candles give 59% win days, while mostly simulated ones give 87%.</p>
+      <p>Option prices are also estimated from NIFTY and India VIX, not taken from real historical option quotes. Charges are large: in the real-candle month they took ₹8,010 out of ₹16,449 gross profit.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Risks</div>
+    <h2>What can go wrong</h2>
+    <ul class="plain">
+      <li>A strong trend day can hit the stop-loss, then hit the re-entry's stop-loss too. Those are the losing days in the table.</li>
+      <li>Fast markets fill stop-losses worse than the backtest assumes, especially around news, RBI policy and budget days.</li>
+      <li>About ₹91,000 of margin per lot is tied up to make the 1-month profit above, roughly 8% for the month on real candles.</li>
+      <li>One good month is a small sample. The real-candle result could easily be luck in either direction.</li>
+      <li>Selling options needs discipline: the strategy only works if every stop-loss and the 3:25 PM exit are taken without exception.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow">What we built</div>
+    <h2>From idea to daily alerts</h2>
+    <ul class="plain">
+      <li><b>Backtest studio.</b> A local web app that replays every day minute by minute, with the stop-loss, re-entry, guard and charges, and shows the equity curve and a day-by-day trade log.</li>
+      <li><b>Real exchange data.</b> All prices now come from Dhan: real NIFTY 5-minute candles for backtests (up to 5 years) and live option prices for the alerts. The old free data's last candle of the day carried the official closing price instead of the last trade, which made 3:25 PM exits look wrong; Dhan's candles don't have that problem.</li>
+      <li><b>Telegram alerts every trading day.</b> A scanner runs on GitHub Actions from 8:50 AM to 3:40 PM, Monday to Friday. Each run starts the next one, so it doesn't depend on GitHub's unreliable timer or on any computer staying on. Entries use live option prices from Dhan.</li>
+      <li><b>Alerts only.</b> No broker account is connected for trading. Every alert is a suggestion to place the trade by hand.</li>
+    </ul>
+  </section>
+
+  <footer>Built for learning and testing. Backtest results are not a promise of future returns, and none of this is investment advice. Trade only with money you can afford to lose.</footer>
+</div>

@@ -1,6 +1,4 @@
 pandas
 numpy
-yfinance
 requests
-growwapi
 pyotp

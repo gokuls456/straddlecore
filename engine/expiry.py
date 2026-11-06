@@ -54,3 +54,17 @@ def trading_days_until(d: date, expiry: date, trading_days: Optional[Iterable[da
             count += 1
         cur += timedelta(days=1)
     return count
+
+
+def next_weekly_expiry(now=None) -> str:
+    """Current NIFTY weekly expiry as YYYY-MM-DD, rolling over after 15:30 on expiry day.
+
+    Calendar estimate; DhanQuotes.resolve_expiry() maps it to the expiry Dhan actually lists
+    (holiday-shifted weeks included)."""
+    from datetime import datetime
+
+    now = now or datetime.now()
+    expiry = nifty_weekly_expiry(now.date())
+    if expiry == now.date() and (now.hour > 15 or (now.hour == 15 and now.minute >= 30)):
+        expiry = nifty_weekly_expiry(now.date() + timedelta(days=1))
+    return expiry.strftime("%Y-%m-%d")

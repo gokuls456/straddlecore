@@ -8,25 +8,6 @@ from rich.panel import Panel
 
 console = Console()
 
-# ==========================================
-# Groww API Mock & Data Loading
-# ==========================================
-class GrowwAPIHelper:
-    """
-    Placeholder for Groww API interactions.
-    Groww does not have a publicly documented API for algorithmic trading or fetching
-    historical 3-minute data without authentication. In practice, you would either:
-    1. Export your data manually from Groww/TradingView into a CSV.
-    2. Reverse-engineer the Groww web API (using requests and your session token).
-    """
-    def __init__(self, token=None):
-        self.token = token
-        
-    def fetch_historical_data(self, symbol, interval, start_date, end_date):
-        print(f"Fetching {symbol} data from {start_date} to {end_date} at {interval}m interval from Groww...")
-        # Mocking an API call
-        return pd.DataFrame()
-
 def load_data(filepath=None):
     if filepath:
         df = pd.read_csv(filepath)
@@ -35,20 +16,17 @@ def load_data(filepath=None):
         return df
     else:
         try:
-            print("Attempting to fetch real 3-minute market data via TradingView...")
-            from tvDatafeed import TvDatafeed, Interval
-            import logging
-            logging.getLogger('tvDatafeed').setLevel(logging.CRITICAL)
-            tv = TvDatafeed()
-            df = tv.get_hist(symbol='NIFTY', exchange='NSE', interval=Interval.in_3_minute, n_bars=3000)
-            if df is not None and not df.empty:
-                df.drop(columns=['symbol', 'volume'], inplace=True, errors='ignore')
-                df.index.name = 'datetime'
-                print(f"Successfully fetched {len(df)} real 3-min candles directly from TradingView!")
+            print("Fetching the last 90 days of real 3-minute NIFTY candles from Dhan...")
+            from datetime import timedelta
+            from engine.dhan_client import nifty_candles
+            today = datetime.now().date()
+            df = nifty_candles((today - timedelta(days=90)).isoformat(), today.isoformat(), minutes=3)
+            if not df.empty:
+                print(f"Fetched {len(df)} real 3-min candles from Dhan.")
                 return df
         except Exception as e:
-            print(f"Could not fetch real data ({e}). Falling back to mock data...")
-            
+            print(f"Could not fetch Dhan data ({e}). Falling back to mock data...")
+
         print("Generating 90 days of mock 3-minute Nifty 50 data...")
         dates = pd.date_range(start='2024-01-01', periods=90, freq='B')
         mock_data = []

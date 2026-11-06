@@ -1,6 +1,6 @@
 # STRADDLECORE: NIFTY 50 Algorithmic Trading Studio & Live Execution Engine
 
-A production-grade algorithmic trading and backtesting studio designed for Indian index derivatives (NSE: NIFTY 50). Features a high-performance backtesting engine, an interactive dark-mode dashboard, live broker API integration (Groww & Zerodha Kite), and an automated execution daemon.
+A production-grade algorithmic trading and backtesting studio designed for Indian index derivatives (NSE: NIFTY 50). Features a high-performance backtesting engine, an interactive dark-mode dashboard, Dhan (DhanHQ v2) as the single broker and market-data source, and an automated execution daemon.
 
 ---
 
@@ -56,19 +56,31 @@ The studio provides position sizing tailored to account balance, with full backt
 
 ---
 
-## 🔌 Live Broker API Integration
+## 🔌 Dhan: the only broker and data source
 
-The studio includes native connector interfaces for Indian discount brokers:
+Everything runs on Dhan's DhanHQ v2 API ([docs](https://dhanhq.co/docs/v2/), [official SDK](https://github.com/dhan-oss/DhanHQ-py)).
+The shared client is `engine/dhan_client.py`.
 
-* **Groww Trading API (`growwapi`):**
-  - Real-time order placement (`place_order`), modification, and cancellation for NSE F&O.
-  - Multi-account switching:
-    - **Demo Account:** Simulated ₹30,000 virtual balance for paper trading and validation.
-    - **Original / Live Account:** Live order placement directly into the user's Groww account with auto-filled ₹30,000 capital and live balance sync (available margin fetched directly from Groww API).
-* **Zerodha Kite Connect v3:**
-  - WebSocket quote feed and automated order routing.
-* **Credentials Storage:**
-  - Securely persisted locally in `cache/broker_config.json`.
+| Used for | Dhan endpoint | Needs |
+| :--- | :--- | :--- |
+| Backtests: NIFTY 5-min candles (5 yrs), daily bars | `/charts/intraday`, `/charts/historical` | Data API plan |
+| Gold Mini backtest: MCX GOLDM futures candles | `/charts/intraday` (`MCX_COMM`, `FUTCOM`) | Data API plan |
+| Real-premium backtest: expired NIFTY weekly options | `/charts/rollingoption` | Data API plan |
+| Signal scanner + live/demo algo: spot, India VIX, option prices | `/marketfeed/ltp`, `/optionchain`, `/optionchain/expirylist` | Data API plan |
+| Funds, profile | `/fundlimit`, `/profile` | free |
+| Orders (Original account) | `/orders` | free, **static IP** whitelisted |
+
+**Login**, either:
+- **Client ID + access token** (web.dhan.co → Profile → Access DhanHQ APIs → Generate Access Token). Valid 24 h.
+- **Client ID + Dhan PIN + TOTP secret** (enable TOTP on the same page). A fresh token is generated automatically every day. Use this for GitHub Actions.
+
+Save keys in the dashboard ("Dhan API" box) or with `.venv/bin/python scripts/set_dhan_keys.py`
+(`--check` tests every data call). Keys are stored in `cache/broker_config.json` (git-ignored).
+Environment variables `DHAN_CLIENT_ID`, `DHAN_ACCESS_TOKEN`, `DHAN_PIN`, `DHAN_TOTP_SECRET` override the file.
+
+**Subscription:** market data needs the Dhan **Data API** plan (₹499 + GST per month, auto-renews every 30 days from your
+Dhan ledger balance). Subscribe at web.dhan.co → Profile → Access DhanHQ APIs → Data APIs. Trading APIs are free.
+Without the plan every data call fails with *"Data APIs not subscribed"* (codes 806 / DH-902).
 
 ---
 
@@ -80,10 +92,12 @@ doinggg/
 ├── backtest_cli.py                # Command-Line Backtester with Rich terminal formatting
 ├── paper_trader.py                # Standalone paper trading daemon
 ├── cache/
-│   ├── broker_config.json         # Persisted broker credentials (Groww / Kite)
+│   ├── broker_config.json         # Dhan keys, Telegram settings, demo balance (git-ignored)
 │   └── live_algo_state.json       # Real-time state of the automated execution engine
 ├── engine/
-│   ├── data_feed.py               # Historical & intraday NIFTY 5-minute candle provider
+│   ├── dhan_client.py             # DhanHQ v2 client: login, rate limits, quotes, candles, scrip master
+│   ├── dhan_broker.py             # Dhan funds, live option quotes and market orders
+│   ├── data_feed.py               # NIFTY 5-minute candles from Dhan for backtests
 │   ├── live_runner.py             # Asynchronous execution daemon (watches clock, routes orders)
 │   └── straddle_engine.py         # 4-Branch Straddle Simulation Engine with Black-Scholes pricing
 ├── static/
@@ -135,9 +149,9 @@ python backtest_cli.py --period "6 months" --capital 40000 --initial-lots 1 --lo
 | `/api/backtest` | `POST` | Executes dynamic backtests for any chosen strategy with custom capital, period, and lots. |
 | `/api/day_detail/<date>` | `GET` | Fetches bar-by-bar intraday timeline and P&L curve for a specific day. |
 | `/api/export_csv` | `GET` | Exports complete session-by-session trade logs to CSV (descending date order). |
-| `/api/broker/config` | `GET / POST` | Reads or updates broker configuration (Groww / Kite). |
-| `/api/broker/balance` | `GET` | Fetches real-time available margin balance from Groww API. |
-| `/api/broker/test` | `POST` | Authenticates and tests connection latency to broker API. |
+| `/api/broker/config` | `GET / POST` | Reads or updates Dhan keys and app settings (secrets are never returned). |
+| `/api/broker/balance` | `GET` | Fetches available funds from Dhan. |
+| `/api/broker/test` | `POST` | Tests and saves Dhan keys; reports whether the Data API plan is active. |
 | `/api/algo/start` | `POST` | Arms and starts the background live automation engine. |
 | `/api/algo/stop` | `POST` | Disarms and stops the automation engine. |
 | `/api/algo/square_off_all` | `POST` | Immediately squares off all open positions at market price. |
@@ -149,7 +163,7 @@ python backtest_cli.py --period "6 months" --capital 40000 --initial-lots 1 --lo
 ## 🔮 Future Roadmap
 
 1. **Multi-Strategy Selector:** Expanding the studio to include additional high-probability strategies (Opening Range Breakout, 1 PM Volatility Drop, Gap Drive).
-2. **Live Margin Balance Sync:** Automatic polling of live funds/margin available directly from Groww API.
+2. **Live Margin Balance Sync:** Automatic polling of live funds/margin available directly from Dhan.
 3. **Telegram / WhatsApp Webhook Alerts:** Real-time push notifications for order fills, SL triggers, and EOD P&L summaries.
 
 ## Telegram signal alerts on GitHub Actions
@@ -158,5 +172,5 @@ python backtest_cli.py --period "6 months" --capital 40000 --initial-lots 1 --lo
 It checks all 6 strategies and sends Telegram alerts for entries, exits and a 3:30 PM summary. No orders are placed.
 
 - **Settings:** edit `signals_config.json` (`enabled`, `capital`, `strategies`).
-- **Secrets:** `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in the repository's Actions secrets.
+- **Secrets:** `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and for market data `DHAN_CLIENT_ID` + `DHAN_PIN` + `DHAN_TOTP_SECRET` (or `DHAN_ACCESS_TOKEN`, which expires daily) in the repository's Actions secrets. The Dhan Data API plan must be active.
 - **Status page:** GitHub Pages serves `docs/index.html` (today's signals, paper P&L history from `docs/data/`).

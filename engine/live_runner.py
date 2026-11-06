@@ -2,7 +2,7 @@
 Live / paper algo runner for the NIFTY 50 4-branch straddle.
 
 Demo account: simulated fills against live-ish prices, ₹30,000 virtual cash.
-Original account: Groww market orders when strategy triggers fire.
+Original account: Dhan market orders when strategy triggers fire (quotes from Dhan's Data API).
 """
 
 from __future__ import annotations
@@ -16,8 +16,9 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from engine.data_feed import NiftyDataFeed
-from engine.groww_broker import GrowwBroker, next_weekly_expiry
 from engine.dhan_broker import DhanBroker
+from engine.dhan_client import dhan_credentials
+from engine.expiry import next_weekly_expiry
 from engine import telegram_notifier as tg
 from engine.expiry import trading_days_until
 from engine.strategy_registry import UnifiedStrategyRunner, get_strategy
@@ -73,10 +74,10 @@ class LiveAlgoRunner:
         self.pl_stop = -3000.0
         self.hedge_distance_pts = 300
 
-        self.broker_name = "groww"
+        self.broker_name = "dhan"
         self.account_type = "demo"
         self.execution_mode = "paper"
-        self.broker: Optional[Any] = None  # GrowwBroker or DhanBroker
+        self.broker: Optional[Any] = None  # DhanBroker
         self.live_balance = DEMO_CAPITAL
 
         self.active_positions: List[Dict[str, Any]] = []
@@ -213,24 +214,8 @@ class LiveAlgoRunner:
             self.pl_stop = -15000.0
 
     def _init_broker(self, cfg: Dict[str, Any]) -> Optional[Any]:
-        """Order broker for the Original account. Dhan places orders; Groww (if keys exist) supplies quotes."""
-        groww_cfg = cfg.get("groww", {})
-        groww = None
-        if groww_cfg.get("api_key"):
-            groww = GrowwBroker(
-                api_key=groww_cfg.get("api_key") or "",
-                api_secret=groww_cfg.get("api_secret") or groww_cfg.get("auth_token") or "",
-                access_token=groww_cfg.get("access_token") or "",
-            )
-        if self.broker_name == "dhan":
-            dhan_cfg = cfg.get("dhan", {})
-            if groww and not groww.connect()[0]:
-                groww = None
-            if not groww:
-                self._event("BROKER_WARNING", "No Groww connection for quotes: Dhan orders will use estimated prices.")
-            broker = DhanBroker(dhan_cfg.get("client_id") or "", dhan_cfg.get("access_token") or "", data_broker=groww)
-        else:
-            broker = groww or GrowwBroker()
+        """Dhan broker for the Original account: orders and live quotes."""
+        broker = DhanBroker(**dhan_credentials(cfg))
         ok, msg = broker.connect()
         if not ok:
             self._event("BROKER_ERROR", msg)
@@ -249,7 +234,7 @@ class LiveAlgoRunner:
             return {"success": True, "message": "Algo is already running.", "state": self.get_status()}
 
         broker_cfg = self._load_broker_config()
-        self.broker_name = broker_cfg.get("broker", "groww")
+        self.broker_name = "dhan"
         self.account_type = broker_cfg.get("account_type", "demo")
         if config_override and config_override.get("account_type"):
             self.account_type = config_override["account_type"]
@@ -278,6 +263,11 @@ class LiveAlgoRunner:
                     "error": f"Original account needs working {self.broker_name.title()} credentials. Save and test them first.",
                     "state": self.get_status(),
                 }
+        else:
+            # Demo: paper fills, but priced from Dhan live quotes when Dhan keys are saved.
+            # Orders are only ever sent when execution_mode == "live".
+            demo_quotes = DhanBroker(**dhan_credentials(broker_cfg))
+            self.broker = demo_quotes if demo_quotes.client.configured else None
 
         self.has_entered = False
         self.in_reentry = False
@@ -479,7 +469,7 @@ class LiveAlgoRunner:
         self.gross_pnl = self.daily_pnl
 
     def _refresh_market(self):
-        """NIFTY spot and India VIX from Yahoo Finance when no broker supplies them (demo mode).
+        """NIFTY spot and India VIX from Dhan when no order broker is connected (demo mode).
         Cached for 30 s; keeps the last good values on failure."""
         if time.time() - getattr(self, "_market_at", 0) < 30:
             return
@@ -658,7 +648,7 @@ class LiveAlgoRunner:
                 self.status = "ERROR"
                 self.status_message = (
                     f"Entry failed ({self._entry_error}) and {len(stuck)} filled leg(s) could not be closed: "
-                    f"{', '.join(p['trading_symbol'] for p in stuck)}. Close them manually in Groww now."
+                    f"{', '.join(p['trading_symbol'] for p in stuck)}. Close them manually in Dhan now."
                 )
             else:
                 self.status = "ENTRY_FAILED"

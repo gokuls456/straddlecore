@@ -1,8 +1,6 @@
 flask
 pandas
 numpy
-yfinance
 requests
 pyarrow
-growwapi
 pyotp

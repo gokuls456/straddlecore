@@ -37,7 +37,6 @@
                     <select id="account-type-select" class="account-select" onchange="onAccountTypeChange(this.value)">
                         <option value="demo" selected>🧪 Demo Account (Paper Trading)</option>
                         <!-- Real account disabled for now: backtest + Telegram signal alerts only.
-                        <option value="original:groww">🟢 Original Account (Groww Live API)</option>
                         <option value="original:dhan">🔵 Original Account (Dhan Live API)</option>
                         -->
                     </select>
@@ -103,7 +102,7 @@
                             <button type="button" class="account-toggle-btn" id="btn-acc-original" onclick="switchAccount('original')">
                                 <span class="toggle-icon">🟢</span>
                                 <div class="toggle-text">
-                                    <strong>Original Account (Groww)</strong>
+                                    <strong>Original Account (Dhan)</strong>
                                     <small>Live API Execution • Real NSE F&O Orders</small>
                                 </div>
                             </button>
@@ -129,72 +128,54 @@
                                 </div>
                             </div>
                             <div class="bal-action-col">
-                                <button class="btn btn-sm btn-outline live-only hidden" onclick="refreshBalance()" title="Sync live balance from Groww">
+                                <button class="btn btn-sm btn-outline live-only hidden" onclick="refreshBalance()" title="Sync live balance from Dhan">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
                                     <span>Sync</span>
                                 </button>
-                                <button class="btn btn-sm btn-outline live-only hidden" id="btn-toggle-keys" onclick="toggleKeysDrawer()" title="View or edit Groww API credentials">
-                                    <span>🔑 Groww Keys</span>
+                                <button class="btn btn-sm btn-outline live-only hidden" id="btn-toggle-keys" onclick="toggleKeysDrawer()" title="View or edit Dhan API keys">
+                                    <span>🔑 Dhan Keys</span>
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Real account disabled for now: Groww / Dhan credentials box commented out.
-                        Groww API Credentials Collapsible Box
-                        <div id="original-keys-box" class="original-keys-box live-only hidden">
+                        <!-- Dhan API: the only broker and market-data source (backtests, signals, live prices, orders) -->
+                        <div id="dhan-keys-box" class="original-keys-box">
                             <div class="keys-box-header">
-                                <span class="keys-title" id="live-keys-title">Groww Trading API Credentials</span>
-                                <span class="badge badge-outline" id="groww-auth-badge">Not verified</span>
+                                <span class="keys-title">Dhan API (market data + orders)</span>
+                                <span class="badge badge-outline" id="dhan-auth-badge">Not connected</span>
                             </div>
-                            <div class="live-broker-switch">
-                                <span class="form-label" style="margin:0;">Place orders with:</span>
-                                <button type="button" class="btn btn-xs btn-outline active" id="live-broker-btn-groww" onclick="selectLiveBroker('groww')">Groww</button>
-                                <button type="button" class="btn btn-xs btn-outline" id="live-broker-btn-dhan" onclick="selectLiveBroker('dhan')">Dhan</button>
-                            </div>
-                            <div id="live-creds-dhan" class="hidden">
-                                <div class="form-group" style="margin-bottom:8px;">
-                                    <label class="form-label">Dhan Client ID</label>
-                                    <input type="text" id="live-dhan-client-id" class="form-input form-input-mono" placeholder="e.g. 1100000000">
-                                </div>
-                                <div class="form-group" style="margin-bottom:6px;">
-                                    <label class="form-label">Dhan Access Token</label>
-                                    <div class="input-with-action">
-                                        <input type="password" id="live-dhan-token" class="form-input form-input-mono" placeholder="Paste Dhan access token">
-                                        <button type="button" class="btn-toggle-eye" onclick="toggleInputMask('live-dhan-token')">👁</button>
-                                    </div>
-                                </div>
-                                <div class="bal-sub" style="margin-bottom:10px;">Orders go to Dhan. Live prices come from your saved Groww keys (Dhan Data API is a paid add-on). The token expires daily: paste a new one each morning.</div>
-                            </div>
-                            <div id="live-creds-groww">
                             <div class="form-group" style="margin-bottom:8px;">
-                                <label class="form-label">Groww API Key</label>
+                                <label class="form-label">Dhan Client ID</label>
+                                <input type="text" id="live-dhan-client-id" class="form-input form-input-mono" placeholder="e.g. 1100000000" autocomplete="off">
+                            </div>
+                            <div class="form-group" style="margin-bottom:8px;">
+                                <label class="form-label">Access Token <small class="text-muted">(option 1: paste daily, valid 24 h)</small></label>
                                 <div class="input-with-action">
-                                    <input type="password" id="live-groww-api-key" class="form-input form-input-mono" placeholder="Paste Groww API Key">
-                                    <button type="button" class="btn-toggle-eye" onclick="toggleInputMask('live-groww-api-key')">👁</button>
+                                    <input type="password" id="live-dhan-token" class="form-input form-input-mono" placeholder="Paste Dhan access token (valid 24 h)" autocomplete="off">
+                                    <button type="button" class="btn-toggle-eye" onclick="toggleInputMask('live-dhan-token')">👁</button>
                                 </div>
                             </div>
-                            <div class="form-group" style="margin-bottom:10px;">
-                                <label class="form-label">Groww API Secret</label>
-                                <div class="input-with-action">
-                                    <input type="password" id="live-groww-api-secret" class="form-input form-input-mono" placeholder="Paste Groww API Secret">
-                                    <button type="button" class="btn-toggle-eye" onclick="toggleInputMask('live-groww-api-secret')">👁</button>
+                            <div class="form-group" style="margin-bottom:6px;">
+                                <label class="form-label">PIN + TOTP secret <small class="text-muted">(option 2: automatic daily login)</small></label>
+                                <div class="input-with-action" style="gap:6px;">
+                                    <input type="password" id="live-dhan-pin" class="form-input form-input-mono" placeholder="Dhan login PIN" autocomplete="off" style="max-width:9rem;">
+                                    <input type="password" id="live-dhan-totp" class="form-input form-input-mono" placeholder="Text code under the TOTP QR" autocomplete="off">
+                                    <button type="button" class="btn-toggle-eye" onclick="toggleInputMask('live-dhan-totp')">👁</button>
                                 </div>
                             </div>
+                            <div class="bal-sub" style="margin-bottom:10px;">
+                                Backtests, signal alerts and live prices all come from Dhan and need the Dhan <b>Data API</b> plan
+                                (₹499 + GST / month: web.dhan.co → Profile → Access DhanHQ APIs → Data APIs). Placing orders also needs
+                                a static IP whitelisted in the same Dhan page.
                             </div>
                             <div class="key-actions">
-                                <button class="btn btn-sm btn-outline" id="btn-test-live-groww" onclick="testLiveBrokerKeys()">
+                                <button class="btn btn-sm btn-primary" id="btn-test-dhan" onclick="testLiveDhanKeys()">
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                    <span id="btn-test-live-label">Test Groww Connection</span>
-                                </button>
-                                <button class="btn btn-sm btn-primary" id="btn-save-live-groww" onclick="saveLiveBrokerKeys()">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                                    <span>Save Credentials</span>
+                                    <span>Test &amp; Save Dhan Keys</span>
                                 </button>
                             </div>
                             <div id="broker-inline-msg" class="inline-msg"></div>
                         </div>
-
-                        -->
 
                         <!-- Telegram alerts (demo and live) -->
                         <div class="original-keys-box telegram-box">
@@ -319,7 +300,7 @@
                         <span class="algo-status-badge status-idle" id="algo-status-badge">ALGO IDLE</span>
                         <div class="algo-status-desc-wrap">
                             <span class="algo-status-desc" id="algo-status-desc">
-                                Algo engine ready on <strong>ORIGINAL (GROWW LIVE)</strong>. Auto-filled capital: <strong>₹30,000</strong>. When the strategy trigger hits, it places the order directly on Groww.
+                                Algo engine ready on <strong>DEMO (PAPER)</strong>. Auto-filled capital: <strong>₹30,000</strong>. Prices come from Dhan when your Dhan keys are saved.
                             </span>
                         </div>
                     </div>
@@ -406,7 +387,7 @@
                         <div class="timeline-items" id="live-event-log">
                             <div class="timeline-item">
                                 <span class="timeline-time">Ready</span>
-                                <span class="timeline-desc">Algo engine standing by. Choose Original (Groww) or Demo, select strategy, and start algo.</span>
+                                <span class="timeline-desc">Algo engine standing by. Choose Demo (or Original on Dhan), select strategy, and start algo.</span>
                             </div>
                         </div>
                     </div>
@@ -425,6 +406,7 @@
                         <option value="option_buying">🎯 Option Buying (Long Straddle)</option>
                         <option value="short_straddle">🏛️ Classic Short Straddle</option>
                         <option value="trend_hedged_straddle">🧭 Trend-Hedged Straddle</option>
+                        <option value="gold_trend_futures">🥇 Gold Mini Trend Futures (test)</option>
                     </select>
                 </div>
                 <div class="toolbar-period-select-wrap">
@@ -1014,121 +996,6 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeDayModal()">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- LIVE BROKER API CONFIGURATION MODAL (Groww & Zerodha Kite) -->
-    <div id="broker-modal-overlay" class="modal-overlay hidden" onclick="handleBrokerOverlayClick(event)">
-        <div class="modal-dialog modal-dialog-md" id="broker-modal-dialog">
-            <div class="modal-header">
-                <div>
-                    <h3 class="modal-title">⚡ Connect Real-Time Broker API</h3>
-                    <div class="modal-subtitle">Direct Institutional Order Routing & Live Intraday Option Ticks</div>
-                </div>
-                <button class="modal-close-btn" onclick="closeBrokerModal()" title="Close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <!-- Broker Selection Tabs -->
-                <div class="broker-tabs">
-                    <button class="broker-tab-btn active" id="tab-broker-groww" onclick="switchBrokerTab('groww')">
-                        <span class="broker-icon">🌱</span>
-                        <div class="broker-tab-text">
-                            <strong>Groww Trading API</strong>
-                            <small>REST API & Live Option Quotes</small>
-                        </div>
-                    </button>
-                    <button class="broker-tab-btn" id="tab-broker-kite" onclick="switchBrokerTab('kite')">
-                        <span class="broker-icon">🪁</span>
-                        <div class="broker-tab-text">
-                            <strong>Zerodha Kite Connect</strong>
-                            <small>Kite Connect 3.0 API & WebSockets</small>
-                        </div>
-                    </button>
-                </div>
-
-                <!-- Live Status Banner -->
-                <div id="broker-status-alert" class="broker-alert broker-alert-idle">
-                    <div class="alert-icon">⚡</div>
-                    <div class="alert-info">
-                        <strong id="broker-alert-title">API Authentication Ready</strong>
-                        <span id="broker-alert-msg">Enter your API credentials to stream live ticks and route orders for the 4-branch straddle strategy.</span>
-                    </div>
-                </div>
-
-                <!-- Groww Config Form -->
-                <div id="form-broker-groww" class="broker-form-panel">
-                    <div class="form-group">
-                        <label class="form-label">Groww Client ID / User ID <span class="text-danger">*</span></label>
-                        <input type="text" id="groww-client-id" class="form-input" placeholder="e.g. GRW1098452">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Groww API Key <span class="text-danger">*</span></label>
-                        <input type="text" id="groww-api-key" class="form-input" placeholder="Paste Groww API key">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Groww API Secret <span class="text-danger">*</span></label>
-                        <input type="password" id="groww-api-secret" class="form-input" placeholder="Paste Groww API secret">
-                        <input type="hidden" id="groww-auth-token">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Execution Environment</label>
-                        <div class="radio-pill-group">
-                            <label class="radio-pill">
-                                <input type="radio" name="groww-mode" value="paper" checked>
-                                <span>Paper Trading (Live Market Ticks, Simulated Fills)</span>
-                            </label>
-                            <label class="radio-pill">
-                                <input type="radio" name="groww-mode" value="live">
-                                <span class="text-warning">Live Execution (Direct NSE Order Placement)</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Zerodha Kite Form -->
-                <div id="form-broker-kite" class="broker-form-panel hidden">
-                    <div class="form-group">
-                        <label class="form-label">Kite Connect API Key <span class="text-danger">*</span></label>
-                        <input type="text" id="kite-api-key" class="form-input" placeholder="e.g. 7q8z9w9e9...">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Kite API Secret <span class="text-danger">*</span></label>
-                        <input type="password" id="kite-api-secret" class="form-input" placeholder="e.g. a1b2c3d4e5f6...">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Request Token / Access Token</label>
-                        <input type="password" id="kite-access-token" class="form-input" placeholder="Generated from Kite login redirect">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Execution Environment</label>
-                        <div class="radio-pill-group">
-                            <label class="radio-pill">
-                                <input type="radio" name="kite-mode" value="paper" checked>
-                                <span>Paper Trading (Live Market Ticks, Simulated Fills)</span>
-                            </label>
-                            <label class="radio-pill">
-                                <input type="radio" name="kite-mode" value="live">
-                                <span class="text-warning">Live Execution (Direct NSE Order Placement)</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Modal Footer -->
-            <div class="modal-footer" style="justify-content: space-between;">
-                <button class="btn btn-secondary" onclick="closeBrokerModal()">Cancel</button>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn btn-outline" id="btn-test-broker" onclick="testBrokerConnection()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                        <span>Test Connection</span>
-                    </button>
-                    <button class="btn btn-primary btn-glow" id="btn-save-broker" onclick="saveBrokerConfig()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                        <span>Save & Enable Live Automation</span>
-                    </button>
-                </div>
             </div>
         </div>
     </div>

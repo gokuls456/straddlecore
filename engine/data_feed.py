@@ -1,9 +1,10 @@
 """
-Market Data Feed Provider for NIFTY 50 Options Backtesting
+Market Data Feed Provider for NIFTY 50 Options Backtesting (data from Dhan only)
 Supports:
-- Downloading real NIFTY 50 (^NSEI) data via yfinance
-- Intraday 5-min bars with accurate Open, High, Low, Close
-- Intraday path generation for multi-year periods calibrated to real daily OHLC
+- Real NIFTY 50 5-minute bars from Dhan's intraday charts API (last 5 years, needs the
+  Dhan Data API plan), fetched in 90-day pieces
+- Days Dhan has a daily bar for but no 5-minute bars get a path synthesised to match
+  that day's real OHLC (rare: mostly special sessions)
 - Local disk caching for instant subsequent evaluations
 - Handling 'excluding last 30 days' toggle as seen in user's configuration
 """
@@ -63,7 +64,7 @@ class NiftyDataFeed:
                 end_date = today
                 start_date = end_date - timedelta(days=total_days)
 
-        cache_key = f"{start_date}_{end_date}.parquet"
+        cache_key = f"dhan_nifty_{start_date}_{end_date}.parquet"
         cache_path = os.path.join(self.cache_dir, cache_key)
         
         if os.path.exists(cache_path):
@@ -73,37 +74,19 @@ class NiftyDataFeed:
             except Exception as e:
                 logger.warning(f"Failed to read parquet cache: {e}")
 
-        # Fetch daily data for the whole window from yfinance
-        import yfinance as yf
-        ticker = "^NSEI"
-        
-        # Download daily bars to get ground truth OHLC
-        start_fetch = (start_date - timedelta(days=5)).strftime("%Y-%m-%d")
-        end_fetch = (end_date + timedelta(days=2)).strftime("%Y-%m-%d")
-        
-        daily_df = pd.DataFrame()
-        try:
-            daily_df = yf.download(ticker, start=start_fetch, end=end_fetch, progress=False, interval="1d")
-            if isinstance(daily_df.columns, pd.MultiIndex):
-                daily_df.columns = [c[0].lower() for c in daily_df.columns]
-            else:
-                daily_df.columns = [c.lower() for c in daily_df.columns]
-        except Exception as e:
-            logger.warning(f"Error fetching yfinance daily data: {e}")
+        from engine.dhan_client import NIFTY_ID, get_client
 
-        # Try to download real 5-minute data for recent 59 days
-        intraday_5m = pd.DataFrame()
-        try:
-            # yfinance max period for 5m is 60d
-            intraday_5m = yf.download(ticker, period="60d", interval="5m", progress=False)
-            if isinstance(intraday_5m.columns, pd.MultiIndex):
-                intraday_5m.columns = [c[0].lower() for c in intraday_5m.columns]
-            else:
-                intraday_5m.columns = [c.lower() for c in intraday_5m.columns]
-            if not intraday_5m.empty and intraday_5m.index.tz is not None:
-                intraday_5m.index = intraday_5m.index.tz_convert("Asia/Kolkata").tz_localize(None)
-        except Exception as e:
-            logger.warning(f"Error fetching 5m intraday data: {e}")
+        client = get_client()
+        if not client.configured:
+            raise RuntimeError("Dhan keys missing: save your Dhan Client ID and access token (or PIN + TOTP) first.")
+
+        # Daily bars: ground-truth OHLC and the list of trading days
+        daily_df = client.daily(NIFTY_ID, "IDX_I", "INDEX", start_date - timedelta(days=5), end_date)
+
+        # Real 5-minute bars for the whole window (Dhan keeps 5 years)
+        intraday_5m = client.intraday(NIFTY_ID, "IDX_I", "INDEX",
+                                      datetime.combine(start_date, time(9, 0)),
+                                      datetime.combine(end_date, time(15, 31)), interval=5)
 
         # Construct full intraday dataset day-by-day
         all_day_dfs = []
@@ -112,13 +95,13 @@ class NiftyDataFeed:
         now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
         skip_today = now_ist.date() == today and now_ist.time() < time(15, 35)
         
-        # If daily_df is available, use real dates
+        if daily_df.empty and intraday_5m.empty:
+            raise RuntimeError(client.last_error or "Dhan returned no NIFTY candles for this period.")
+        # Trading days = days Dhan has a daily or 5-minute bar for
         if not daily_df.empty:
             daily_df = daily_df.dropna(subset=['open', 'close', 'high', 'low'])
-            valid_dates = [d.date() for d in daily_df.index if start_date <= d.date() <= end_date]
-        else:
-            # Fallback dates: business days
-            valid_dates = [d.date() for d in pd.date_range(start_date, end_date, freq='B')]
+        days = {d.date() for d in daily_df.index} | (set(intraday_5m.index.date) if not intraday_5m.empty else set())
+        valid_dates = sorted(d for d in days if start_date <= d <= end_date)
 
         for d in valid_dates:
             # Exclude weekends
@@ -127,17 +110,17 @@ class NiftyDataFeed:
             if skip_today and d == today:
                 continue
 
-            # Check if we have real 5m bars for this date
+            # Real Dhan 5m bars for this date?
             day_5m = intraday_5m[intraday_5m.index.date == d] if not intraday_5m.empty else pd.DataFrame()
             
             if len(day_5m) >= 40:
                 # Filter strictly between 09:15 and 15:30
                 day_5m_filtered = day_5m.between_time(time(9, 15), time(15, 30))
                 if len(day_5m_filtered) >= 40:
-                    all_day_dfs.append(day_5m_filtered[['open', 'high', 'low', 'close']])
+                    all_day_dfs.append(day_5m_filtered[['open', 'high', 'low', 'close']].astype(float))
                     continue
 
-            # If real 5m bar is not available, synthesize high-fidelity 5m path anchored to daily OHLC
+            # No 5m bars from Dhan: synthesise a 5m path anchored to the day's real daily OHLC
             d_row = daily_df.loc[daily_df.index.date == d] if not daily_df.empty else pd.DataFrame()
             if not d_row.empty:
                 d_open = float(d_row['open'].iloc[0])
@@ -145,14 +128,7 @@ class NiftyDataFeed:
                 d_low = float(d_row['low'].iloc[0])
                 d_close = float(d_row['close'].iloc[0])
             else:
-                # Realistic base Nifty synthetic level
-                np.random.seed(int(datetime.combine(d, time(0, 0)).timestamp()) % 100000)
-                base = 23500.0 + np.random.uniform(-500, 500)
-                move = np.random.normal(0, 120)
-                d_open = base
-                d_close = base + move
-                d_high = max(d_open, d_close) + abs(np.random.normal(30, 40))
-                d_low = min(d_open, d_close) - abs(np.random.normal(30, 40))
+                continue  # no real data for this day: never invent one
 
             synthetic_day = self._generate_realistic_intraday_day(d, d_open, d_high, d_low, d_close)
             all_day_dfs.append(synthetic_day)

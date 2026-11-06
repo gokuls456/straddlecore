@@ -11,6 +11,7 @@ Supports:
 5. Option Buying (Long Straddle) — ATM CE + PE buyer with risk capped (~₹30k capital)
 6. Classic Short Straddle — Naked ATM straddle seller (~₹2L margin per lot)
 7. Trend-Hedged Short Straddle — ATM straddle seller + one OTM wing on the side the market opened
+8. Gold Mini Trend Futures (backtest only) — buys/sells MCX Gold Mini by the opening direction
 """
 
 from __future__ import annotations
@@ -38,6 +39,22 @@ def calculate_nse_charges(buy_price: float, sell_price: float, qty: int, is_opti
     stamp_duty = (buy_price * qty) * 0.00003
     gst = (brokerage + exchange_charges + sebi_charges) * 0.18
     return round(brokerage + exchange_charges + sebi_charges + stt + stamp_duty + gst, 2)
+
+def calculate_mcx_charges(buy_price: float, sell_price: float, qty_grams: float) -> float:
+    """MCX futures charges per round trip: ₹20 brokerage per order, CTT 0.01% on the sell side,
+    exchange 0.0021%, SEBI ₹10/crore, stamp duty 0.002% on the buy side, GST on fees.
+    Prices are ₹ per 10 g, so turnover = price × grams / 10."""
+    brokerage = 40.0
+    buy_value = buy_price * qty_grams / 10.0
+    sell_value = sell_price * qty_grams / 10.0
+    turnover = buy_value + sell_value
+    exchange_charges = turnover * 0.000021
+    sebi_charges = turnover * 0.000001
+    ctt = sell_value * 0.0001
+    stamp_duty = buy_value * 0.00002
+    gst = (brokerage + exchange_charges + sebi_charges) * 0.18
+    return round(brokerage + exchange_charges + sebi_charges + ctt + stamp_duty + gst, 2)
+
 
 # Registry of all strategies with descriptions, parameters, and metadata
 STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
@@ -160,6 +177,23 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "guard_rule": "±10% portfolio guard up to ₹1L capital, else ±₹15,000",
         "description": "Sells 1 lot ATM Call + ATM Put at 10:00 AM like the Classic Short Straddle, and buys one OTM wing on the side the market opened: market opens up (above yesterday's close) → buys a +300 Call; opens down → buys a −300 Put. The other side stays unhedged, so margin is close to a naked straddle (verify in your broker).",
     },
+    "gold_trend_futures": {
+        "id": "gold_trend_futures",
+        "name": "Gold Mini Trend Futures",
+        "category": "Commodity Futures (backtest only)",
+        "badge": "MCX Gold Mini",
+        "badge_color": "orange",
+        "default_capital": 300000.0,
+        "recommended_lots": 1,
+        "lot_size": 100,              # grams per Gold Mini lot; prices are ₹ per 10 g
+        "capital_per_lot": 150000.0,  # rough MCX margin (~10–12% of ~₹12.6L contract value)
+        "schedule": "10:00 AM IST (Mon–Fri, MCX)",
+        "exit_time": "11:00 PM IST",
+        "sl_rule": "0.5% stop-loss on the futures price",
+        "reentry_rule": "No re-entry",
+        "guard_rule": "1% target (1:2 risk-reward)",
+        "description": "Trend-Hedged idea on Gold Mini futures: if gold opens at 9:00 AM above yesterday's close it BUYS 1 lot (100 g) at 10:00 AM, if it opens below it SELLS. 0.5% stop-loss, 1% target, exit at 11:00 PM. Real MCX GOLDM 5-minute candles from Dhan, front-month contract; history reaches back as far as Dhan's currently listed GOLDM contracts.",
+    },
 }
 
 
@@ -215,6 +249,8 @@ class UnifiedStrategyRunner:
             return self._run_gap_drive(hist_data)
         elif self.strategy_id == "nifty_1pm_drop":
             return self._run_1pm_drop(hist_data)
+        elif self.strategy_id == "gold_trend_futures":
+            return self._run_gold_trend(hist_data)
 
         # Unknown strategy: run Iron Butterfly through the normal path (it maps the request
         # params onto engine arguments; passing them straight to the engine crashes on extras like "period").
@@ -636,6 +672,100 @@ class UnifiedStrategyRunner:
                 "cum_pnl": cum_pnl,
                 "net_pnl": net_pnl,
             })
+
+        return self._format_results(trade_logs, equity_curve, capital)
+
+    def _run_gold_trend(self, hist_data: Dict[date, pd.DataFrame]) -> Dict[str, Any]:
+        """Gold Mini futures: direction from the 9:00 open vs yesterday's close, entry at 10:00,
+        0.5% SL / 1% target on the futures price, time exit at 23:00. 1 lot = 100 g, and
+        prices are ₹ per 10 g, so P&L = price move × 10 per lot."""
+        capital = float(self.params.get("capital") or 300000.0)
+        raw_lots = self.params.get("initial_lots")
+        lots = int(raw_lots) if raw_lots not in (None, "", "auto", 0) else 1
+        grams = lots * 100
+        mult = grams / 10.0
+        sl_pct, target_pct = 0.005, 0.010
+        raw_slip = self.params.get("slippage")
+        slippage = float(raw_slip) if raw_slip not in (None, "") else 0.0  # ₹ per 10 g, each side
+
+        trade_logs, equity_curve = [], []
+        cum_pnl = 0.0
+        sorted_dates = sorted(hist_data.keys())
+
+        for idx, day_date in enumerate(sorted_dates):
+            if idx == 0:
+                continue
+            prev_close = float(hist_data[sorted_dates[idx - 1]]["close"].iloc[-1])
+            df = hist_data[day_date]
+            entry_df = df[df.index.time >= time(10, 0)]
+            if entry_df.empty:
+                continue
+
+            day_open = float(df["open"].iloc[0])
+            side = "BUY" if day_open >= prev_close else "SELL"
+            sign = 1 if side == "BUY" else -1
+            entry_row = entry_df.iloc[0]
+            entry_time_str = entry_row.name.strftime("%H:%M")
+            entry = float(entry_row["open"]) + sign * slippage
+            sl = entry * (1 - sign * sl_pct)
+            target = entry * (1 + sign * target_pct)
+
+            exit_price, exit_time_str, exit_reason = None, "23:00", "Time Exit (23:00)"
+            intraday_curve = []
+            for t_idx, row in entry_df.iterrows():
+                lo, hi, close = float(row["low"]), float(row["high"]), float(row["close"])
+                hit_sl = lo <= sl if side == "BUY" else hi >= sl
+                hit_tgt = hi >= target if side == "BUY" else lo <= target
+                if hit_sl:  # if both touch in one candle, assume the stop came first
+                    exit_price, exit_reason = sl, "SL Hit (-0.5%)"
+                elif hit_tgt:
+                    exit_price, exit_reason = target, "Target Hit (+1%)"
+                elif t_idx.time() >= time(23, 0) or t_idx == entry_df.index[-1]:
+                    exit_price = close
+                    exit_reason = "Time Exit (23:00)" if t_idx.time() >= time(23, 0) else "Session End"
+                cur = exit_price if exit_price is not None else close
+                intraday_curve.append({"time": t_idx.strftime("%H:%M"), "spot": round(close, 0),
+                                       "pnl": round((cur - entry) * sign * mult, 2)})
+                if exit_price is not None:
+                    exit_time_str = t_idx.strftime("%H:%M")
+                    break
+
+            exit_price -= sign * slippage
+            gross_pnl = (exit_price - entry) * sign * mult
+            buy_p, sell_p = (entry, exit_price) if side == "BUY" else (exit_price, entry)
+            charges = calculate_mcx_charges(buy_p, sell_p, grams)
+            net_pnl = round(gross_pnl - charges, 2)
+            cum_pnl = round(cum_pnl + net_pnl, 2)
+            gap = day_open - prev_close
+
+            trade_logs.append({
+                "date": day_date.strftime("%Y-%m-%d"),
+                "day_name": day_date.strftime("%A"),
+                "entry_time": entry_time_str,
+                "spot_at_entry": round(entry, 0),
+                "ce_strike": "-", "ce_entry": 0.0, "ce_exit": 0.0, "ce_sl_hit": False,
+                "pe_strike": "-", "pe_entry": 0.0, "pe_exit": 0.0, "pe_sl_hit": False,
+                "reentry_count": 0,
+                "reentry_pnl": 0.0,
+                "exit_reason": exit_reason,
+                "gross_pnl": round(gross_pnl, 2),
+                "charges": round(charges, 2),
+                "net_pnl": net_pnl,
+                "cum_pnl": cum_pnl,
+                "side": side,
+                "positions_detail": [{
+                    "leg": "GOLDM FUT", "type": "FUT", "branch": f"Opened {'up' if gap >= 0 else 'down'} {gap:+.0f}",
+                    "side": side, "qty": grams, "entry_price": round(entry, 0), "exit_price": round(exit_price, 0),
+                    "exit_reason": exit_reason, "pnl": net_pnl,
+                }],
+                "events": [
+                    {"timestamp": "09:00", "type": "SIGNAL", "detail": f"Gold opened ₹{day_open:,.0f} vs yesterday ₹{prev_close:,.0f} ({gap:+,.0f}) → {side}"},
+                    {"timestamp": entry_time_str, "type": "ENTRY", "detail": f"{side} {lots} lot Gold Mini ({grams} g) @ ₹{entry:,.0f} | SL ₹{sl:,.0f} | Target ₹{target:,.0f}"},
+                    {"timestamp": exit_time_str, "type": "EXIT", "detail": f"Exited @ ₹{exit_price:,.0f} ({exit_reason})"},
+                ],
+                "intraday_curve": intraday_curve,
+            })
+            equity_curve.append({"date": day_date.strftime("%Y-%m-%d"), "cum_pnl": cum_pnl, "net_pnl": net_pnl})
 
         return self._format_results(trade_logs, equity_curve, capital)
 

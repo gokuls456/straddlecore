@@ -6,9 +6,10 @@ No orders are placed. For every strategy it alerts when the entry condition hits
 and alerts on stop-loss / target / trailing / guard / time exits. A summary of all six
 strategies goes out after the close.
 
-Market data: NIFTY 5-minute candles and India VIX from Yahoo Finance (free, may lag a
-little). Option premiums are live Groww quotes when Groww API keys are configured
-(see groww_quotes.py), otherwise Black-Scholes estimates using India VIX as volatility.
+Market data comes only from Dhan (Data API plan): NIFTY 5-minute candles and India VIX
+from Dhan's intraday charts, option premiums from Dhan's option chain. If a live option
+price is missing for a moment, a Black-Scholes estimate (India VIX as volatility) is used
+and marked "~" in the alert.
 
 Entry rules follow the backtest code in strategy_registry.py / straddle_engine.py.
 """
@@ -28,8 +29,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from engine import telegram_notifier as tg
-from engine.groww_quotes import GrowwQuotes
-from engine.indstocks_quotes import INDstocksQuotes
+from engine.dhan_client import INDIA_VIX_ID, NIFTY_ID, DhanQuotes, get_client
 from engine.expiry import nifty_weekly_expiry, trading_days_until
 from engine.straddle_engine import bs_call_price, bs_put_price, get_atm_strike
 from engine.strategy_registry import get_strategy
@@ -85,39 +85,38 @@ def _rupees(v: float) -> str:
     return f"{'−' if v < 0 else '+'}₹{abs(v):,.0f}"
 
 
-def fetch_market_data(now: datetime) -> Tuple[pd.DataFrame, float, float]:
-    """Today's NIFTY 5-min candles (naive IST index), previous close, and India VIX."""
-    import yfinance as yf
-
-    intraday = yf.Ticker("^NSEI").history(period="5d", interval="5m")
+def fetch_market_data(now: datetime, cfg: Optional[Dict[str, Any]] = None) -> Tuple[pd.DataFrame, float, float]:
+    """Today's NIFTY 5-min candles (naive IST index, bar start time), previous close, and India VIX, from Dhan."""
+    client = get_client(cfg)
+    if not client.configured:
+        raise RuntimeError("Dhan keys missing: add DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN (or DHAN_PIN + DHAN_TOTP_SECRET).")
+    start = datetime.combine(now.date() - timedelta(days=7), dtime(9, 0))
+    end = datetime.combine(now.date(), dtime(15, 31))
+    intraday = client.intraday(NIFTY_ID, "IDX_I", "INDEX", start, end, interval=5)
     if intraday.empty:
-        raise RuntimeError("No NIFTY candles from Yahoo Finance.")
-    intraday.index = intraday.index.tz_convert(IST).tz_localize(None)
-    intraday = intraday.rename(columns=str.lower)[["open", "high", "low", "close"]]
+        raise RuntimeError("No NIFTY candles from Dhan.")
+    intraday = intraday[["open", "high", "low", "close"]].astype(float)
     today = intraday[intraday.index.date == now.date()]
     earlier = intraday[intraday.index.date < now.date()]
     prev_close = float(earlier["close"].iloc[-1]) if not earlier.empty else 0.0
     vix = 0.0
     try:
-        v = yf.Ticker("^INDIAVIX").history(period="5d", interval="1d")
-        if not v.empty:
-            vix = float(v["Close"].iloc[-1])
+        vix = client.ltp({"IDX_I": [INDIA_VIX_ID]}).get(("IDX_I", INDIA_VIX_ID), 0.0)
     except Exception as exc:
         logger.debug("VIX fetch failed: %s", exc)
     return today, prev_close, vix
 
 
 class SignalScanner:
-    def __init__(self, data_source: Callable[[datetime], Tuple[pd.DataFrame, float, float]] = fetch_market_data,
+    def __init__(self, data_source: Optional[Callable[[datetime], Tuple[pd.DataFrame, float, float]]] = None,
                  sender: Optional[Callable[[str], None]] = None, state_file: str = STATE_FILE,
                  history_file: str = HISTORY_FILE, config_loader: Optional[Callable[[], Dict[str, Any]]] = None):
-        self.data_source = data_source
+        self.data_source = data_source or (lambda now: fetch_market_data(now, self._config()))
         self.sender = sender  # tests inject a collector; None → Telegram from broker_config
         self.state_file = state_file
         self.history_file = history_file
         self.config_loader = config_loader  # GitHub runner supplies settings from signals_config.json
-        self._quotes: Optional[Any] = None  # INDstocksQuotes or GrowwQuotes
-        self._quotes_key: Tuple[str, ...] = ()
+        self._quotes: Optional[DhanQuotes] = None
         self.thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
         self.last_error = ""
@@ -170,38 +169,37 @@ class SignalScanner:
 
     # ---------- pricing ----------
 
-    def quotes(self) -> Optional[Any]:
-        """Live-quote client: INDstocks if configured, else Groww (rebuilt if the keys change)."""
-        cfg = self._config()
-        i, g = cfg.get("indstocks") or {}, cfg.get("groww") or {}
-        ind = tuple(i.get(k) or "" for k in ("client_id", "mpin", "totp_secret", "access_token"))
-        grw = tuple(g.get(k) or "" for k in ("api_key", "api_secret", "totp_secret"))
-        key = ("ind",) + ind if INDstocksQuotes(*ind).configured else ("groww",) + grw
-        if key != self._quotes_key or self._quotes is None:
-            if key[0] == "ind":
-                self._quotes = INDstocksQuotes(*ind)
-            else:
-                self._quotes = GrowwQuotes(*grw) if grw[0] and (grw[1] or grw[2]) else None
-        self._quotes_key = key
+    def quotes(self) -> Optional[DhanQuotes]:
+        """Dhan option-chain quotes (rebuilt if the Dhan keys change); None without keys."""
+        client = get_client(self._config())
+        if not client.configured:
+            self._quotes = None
+        elif self._quotes is None or self._quotes.client is not client:
+            self._quotes = DhanQuotes(client)
         return self._quotes
+
+    def _expiry(self, now: datetime) -> date:
+        """This week's expiry as Dhan lists it (holiday-shifted weeks included), else the calendar estimate."""
+        expiry = nifty_weekly_expiry(now.date())
+        q = self.quotes()
+        return q.resolve_expiry(expiry) if q else expiry
 
     def _live_price(self, now: datetime, strike: int, opt_type: str) -> Optional[float]:
         q = self.quotes()
         if not q:
             return None
-        px = q.price(nifty_weekly_expiry(now.date()), strike, opt_type)
+        px = q.price(self._expiry(now), strike, opt_type)
         return round(px, 2) if px else None
 
     def _premium(self, now: datetime, spot: float, strike: int, opt_type: str, iv: float) -> float:
-        expiry = nifty_weekly_expiry(now.date())
+        expiry = self._expiry(now)
         mins_left = max(0, (15 * 60 + 30) - (now.hour * 60 + now.minute))
         t = max(0.0008, (max(0.04, mins_left / 375.0) + trading_days_until(now.date(), expiry)) / 252.0)
         fn = bs_call_price if opt_type == "CE" else bs_put_price
         return round(max(0.5, fn(spot, strike, t, 0.065, iv)), 2)
 
-    @staticmethod
-    def _symbol(now: datetime, strike: int, opt_type: str) -> str:
-        expiry = nifty_weekly_expiry(now.date())
+    def _symbol(self, now: datetime, strike: int, opt_type: str) -> str:
+        expiry = self._expiry(now)
         return f"NIFTY {expiry.strftime('%d %b').upper()} {strike} {opt_type}"
 
     def _leg(self, now, spot, iv, strike, opt_type, side, sl_pct=None) -> Dict[str, Any]:
@@ -416,7 +414,7 @@ class SignalScanner:
                 l["cur"] = live
             elif not l.get("live"):
                 l["cur"] = self._premium(now, spot, l["strike"], l["opt"], iv)
-            # A leg priced from Groww keeps its last real price through a brief quote outage
+            # A leg priced from Dhan keeps its last real price through a brief quote outage
             # rather than jumping to the estimate.
             l["high"] = max(l.get("high", l["cur"]), l["cur"])
         pnl = self._trade_pnl(trade)
@@ -464,7 +462,7 @@ class SignalScanner:
     def _entry_text(self, sid, trade, now, iv, reentry) -> str:
         """Short, phone-friendly 'what to buy' alert."""
         legs = sorted(trade["legs"], key=lambda l: l["side"] != "BUY")  # hedges (buys) first
-        expiry = nifty_weekly_expiry(now.date()).strftime("%d %b")
+        expiry = self._expiry(now).strftime("%d %b")
         exit_at = datetime.strptime(trade["exit"], "%H:%M").strftime("%-I:%M %p")
         tag = "🔁 RE-ENTRY" if reentry else "🔔"
         live = all(l.get("live") for l in legs)  # otherwise prices are estimates, marked "~"
@@ -580,7 +578,7 @@ class SignalScanner:
                          "note": st["note"] if st else "", "pnl": round(pnl, 2),
                          "open_trade": st.get("trade") if st and st["status"] == "OPEN" else None})
         q = self.quotes()
-        price_source = f"{q.name} live" if q and q._chain else (f"{q.name} (not connected yet)" if q else "Estimated (no price API keys)")
+        price_source = f"{q.name} live" if q and q._chain else (f"{q.name} (not connected yet)" if q else "Estimated (no Dhan keys)")
         return {"settings": self.settings(), "date": self.state.get("date"), "last_tick": self.last_tick,
                 "price_source": price_source, "quotes_error": q.last_error if q else "",
                 "last_error": self.last_error, "running": bool(self.thread and self.thread.is_alive()), "strategies": rows}

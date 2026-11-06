@@ -10,7 +10,9 @@ on weekdays, otherwise sleep until the next session (at most MAX_SLEEP). The wor
 starts the next run itself, so the runs form an unbroken chain that does not depend on
 GitHub's unreliable cron. Settings come
 from signals_config.json; the Telegram bot token and chat ID come from the
-TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID environment variables (GitHub secrets).
+TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID environment variables (GitHub secrets), and all market
+data from Dhan via DHAN_CLIENT_ID plus DHAN_PIN + DHAN_TOTP_SECRET (automatic daily login) or
+DHAN_ACCESS_TOKEN (pasted, 24 h). The Dhan Data API plan must be active.
 
 State, P&L history and the status page data live in docs/data/ and are committed back
 to the repository, so the afternoon run continues the morning run and the GitHub Pages
@@ -55,18 +57,8 @@ def load_settings() -> dict:
     return {
         "signals": {"enabled": s.get("enabled", True), "strategies": s.get("strategies", ALL_STRATEGIES)},
         "allocated_capital": s.get("capital", 40000),
-        # Optional live option prices (GitHub secrets); without them prices are estimates.
-        "indstocks": {
-            "client_id": os.environ.get("INDSTOCKS_CLIENT_ID", ""),
-            "mpin": os.environ.get("INDSTOCKS_MPIN", ""),
-            "totp_secret": os.environ.get("INDSTOCKS_TOTP_SECRET", ""),
-            "access_token": os.environ.get("INDSTOCKS_ACCESS_TOKEN", ""),
-        },
-        "groww": {
-            "api_key": os.environ.get("GROWW_API_KEY", ""),
-            "api_secret": os.environ.get("GROWW_API_SECRET", ""),
-            "totp_secret": os.environ.get("GROWW_TOTP_SECRET", ""),
-        },
+        # Market data comes only from Dhan; credentials are read from the DHAN_* env vars
+        # (GitHub secrets) by engine.dhan_client.dhan_credentials().
     }
 
 
@@ -87,45 +79,11 @@ def commit_data(message: str):
         log.warning("Push failed; will retry at the next commit.")
 
 
-def diagnose_groww(scanner: SignalScanner):
-    """Log which Groww data calls this key may use (results only, never credentials)."""
-    q = scanner.quotes()
-    if not q or not q._login():
-        log.info("GROWW DIAG: login failed: %s", q.last_error if q else "no keys")
-        return
-    from engine.signal_scanner import nifty_weekly_expiry
-    c, exp = q.client, nifty_weekly_expiry(now_ist().date()).isoformat()
-
-    def attempt(name, fn):
-        try:
-            out = fn()
-            log.info("GROWW DIAG %-14s OK   %s", name, json.dumps(out, default=str)[:300])
-            return out
-        except Exception as exc:
-            log.info("GROWW DIAG %-14s FAIL %s: %s", name, type(exc).__name__, str(exc)[:200])
-
-    attempt("profile", lambda: {k: v for k, v in (c.get_user_profile(timeout=10) or {}).items() if k in ("active_segments", "ddpi_enabled")})
-    attempt("index ltp", lambda: c.get_ltp(exchange_trading_symbols=("NSE_NIFTY",), segment="CASH", timeout=10))
-    attempt("expiries", lambda: c.get_expiries(exchange="NSE", underlying_symbol="NIFTY", timeout=10))
-    attempt("option chain", lambda: c.get_option_chain("NSE", "NIFTY", exp, timeout=12))
-    inst = attempt("instruments", lambda: len(c.get_all_instruments()))
-    if inst:
-        df = c.get_all_instruments()
-        opt = df[(df.get("underlying_symbol") == "NIFTY") & (df.get("segment") == "FNO")] if "underlying_symbol" in df else df.head(0)
-        log.info("GROWW DIAG columns %s", list(df.columns)[:20])
-        if not opt.empty:
-            row = opt.iloc[0]
-            sym = row.get("trading_symbol")
-            log.info("GROWW DIAG sample option row %s", {k: row.get(k) for k in ("trading_symbol", "expiry_date", "strike_price", "instrument_type")})
-            attempt("option ltp", lambda: c.get_ltp(exchange_trading_symbols=(f"NSE_{sym}",), segment="FNO", timeout=10))
-            attempt("option quote", lambda: {k: v for k, v in (c.get_quote(sym, "NSE", "FNO", timeout=10) or {}).items() if k in ("last_price", "ltp", "ohlc")})
-
-
 def price_check(scanner: SignalScanner) -> str:
-    """One line saying whether live Groww option prices work from here."""
+    """One line saying whether live Dhan data works from here."""
     q = scanner.quotes()
     if not q:
-        return "💲 Prices: estimated (no price API keys added)"
+        return "💲 Prices: ⚠️ no Dhan keys (add DHAN_CLIENT_ID + DHAN_PIN + DHAN_TOTP_SECRET secrets)"
     now = now_ist()
     spot = 0.0
     try:
@@ -135,10 +93,9 @@ def price_check(scanner: SignalScanner) -> str:
         pass
     if not spot:
         try:
-            import yfinance as yf
-            spot = float(yf.Ticker("^NSEI").history(period="5d")["Close"].iloc[-1])
-        except Exception:
-            spot = 23000.0
+            spot = q.client.nifty_spot()
+        except Exception as exc:
+            return f"💲 Dhan data FAILED ⚠️ {tg.esc(str(exc)[:200])}"
     from engine.straddle_engine import get_atm_strike
     atm = get_atm_strike(spot)
     px = scanner._live_price(now, atm, "CE")
@@ -180,8 +137,6 @@ def main():
         if not (token and chat):
             sys.exit("Test failed: add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID under Settings → Secrets and variables → Actions.")
         scanner = SignalScanner(sender=send, config_loader=load_settings)
-        if scanner.quotes() and scanner.quotes().name == "Groww":
-            diagnose_groww(scanner)
         sample = scanner.sample_text()
         ok, err = tg.send_message(token, chat, "✅ <b>GitHub Actions connected</b>\n" + price_check(scanner)
                                   + "\nWeekday scans will send alerts here. Sample format:\n\n" + sample)

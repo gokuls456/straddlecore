@@ -15,12 +15,14 @@ let currentStrategyMode = 'hedged_selling';
 let currentAccountType = 'demo';
 let currentBalance = 30000;
 let currentAllocatedCapital = 30000;
-let growwKeysSaved = false;
 let STRATEGY_META = {};  // id -> registry entry from /api/strategies (incl. capital_per_lot)
 const LIVE_ALGO_CAPITAL = 30000;
 let activeChartTab = 'equity';
 let currentExecutionMode = 'fyers_calibrated';
-let activeBrokerTab = 'groww';
+// Dhan is the only broker and market-data source (backtests, signal scanner, live prices, orders).
+const liveOrderBroker = 'dhan';
+let dhanTokenSaved = false;
+let dhanAutoLogin = false;
 
 /**
  * Intelligent capital input parser.
@@ -147,8 +149,12 @@ const STRATEGY_NAMES = {
     'nifty_1pm_drop': '💥 1 PM Volatility Drop',
     'option_buying': '🎯 Long Straddle',
     'short_straddle': '🏛️ Classic Straddle',
-    'trend_hedged_straddle': '🧭 Trend-Hedged Straddle'
+    'trend_hedged_straddle': '🧭 Trend-Hedged Straddle',
+    'gold_trend_futures': '🥇 Gold Mini Trend'
 };
+
+// Backtest-only strategies: the demo algo can't trade them, so picking one must not change the live strategy.
+const BACKTEST_ONLY_STRATEGIES = ['gold_trend_futures'];
 
 function selectLiveStrategy(mode) {
     // Only one strategy runs at a time; it can't be changed while the algo is armed/running.
@@ -176,7 +182,7 @@ function selectLiveStrategy(mode) {
     }
 }
 
-// Show/hide everything that belongs to one account. Demo never shows Groww live details.
+// Show/hide everything that belongs to one account. Demo never shows Dhan live-funds details.
 function applyAccountView(value) {
     currentAccountType = value;
     const isLive = value === 'original';
@@ -239,7 +245,7 @@ async function switchAccount(value) {
     const res = await fetch('/api/broker/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ broker: 'groww', account_type: value })
+        body: JSON.stringify({ broker: 'dhan', account_type: value })
     });
     const data = await res.json().catch(() => ({}));
     if (!data.success) {
@@ -317,32 +323,17 @@ async function saveDemoCapital() {
 }
 
 async function onAccountTypeChange(value) {
-    const [account, broker] = value.split(':');
+    const [account] = value.split(':');
     if (isAlgoActive) {
         alert('Stop the algo before changing the trading mode.');
         syncBrokerLabels();
         return;
     }
-    if (broker && broker !== liveOrderBroker) {
-        if (broker === 'dhan' && !dhanTokenSaved) {
-            alert('Add your Dhan Client ID and Access Token first (Original Account → credentials → Dhan).');
-            syncBrokerLabels();
-            if (currentAccountType === 'original') selectLiveBroker('dhan');
-            return;
-        }
-        const res = await fetch('/api/broker/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ broker })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!data.success) {
-            alert(data.error || 'Could not switch broker.');
-            syncBrokerLabels();
-            return;
-        }
-        liveOrderBroker = broker;
-        selectLiveBroker(broker);
+    if (account === 'original' && !dhanTokenSaved && !dhanAutoLogin) {
+        alert('Add your Dhan keys first (Dhan API box: Client ID + access token, or PIN + TOTP).');
+        syncBrokerLabels();
+        toggleKeysDrawer();
+        return;
     }
     if (account !== currentAccountType) {
         await switchAccount(account);
@@ -354,18 +345,13 @@ async function onAccountTypeChange(value) {
     }
 }
 
-function toggleKeysDrawer() {
-    const box = document.getElementById('original-keys-box');
-    if (box) box.classList.toggle('collapsed');
-}
-
 function toggleInputMask(id) {
     const el = document.getElementById(id);
     if (!el) return;
     el.type = el.type === 'password' ? 'text' : 'password';
 }
 
-// Original account: let the user pick a custom algo capital or use all available Groww funds.
+// Original account: let the user pick a custom algo capital or use all available Dhan funds.
 function startCustomAllocation() {
     const input = document.getElementById('alloc-custom-input');
     if (!input) return;
@@ -393,7 +379,7 @@ async function saveCustomAllocation() {
     if (cancelled || !raw) return;
     const amount = parseCapitalInput(raw);
     if (currentBalance > 0 && amount > currentBalance) {
-        alert(`Only ${formatINR(currentBalance)} is available in Groww. The algo will be capped at that.`);
+        alert(`Only ${formatINR(currentBalance)} is available in Dhan. The algo will be capped at that.`);
     }
     await setAllocation('custom', amount);
 }
@@ -481,21 +467,17 @@ async function refreshBalance() {
         const res = await fetch(`/api/broker/balance?account_type=${currentAccountType}`);
         const data = await res.json();
         if (data.success) {
-            if (data.broker) {
-                liveOrderBroker = data.broker === 'dhan' ? 'dhan' : 'groww';
-                syncBrokerLabels();
-            }
             applyBalanceToUI(data.balance, data.account_type, data.allocated_capital, data.ucc, data.allocation_mode);
             const msg = document.getElementById('broker-inline-msg');
             if (msg && currentAccountType === 'original') {
                 msg.className = 'inline-msg ok';
-                msg.textContent = `${data.broker === 'dhan' ? 'Dhan' : 'Groww'} Live Connected. Available funds: ${formatINR(data.balance)}${data.ucc ? ` (UCC: ${data.ucc})` : ''}.`;
+                msg.textContent = `Dhan Live Connected. Available funds: ${formatINR(data.balance)}${data.ucc ? ` (UCC: ${data.ucc})` : ''}.`;
             }
         } else if (currentAccountType === 'original') {
             const msg = document.getElementById('broker-inline-msg');
             if (msg) {
                 msg.className = 'inline-msg err';
-                msg.textContent = data.error || 'Could not fetch Groww balance. Check API key & secret.';
+                msg.textContent = data.error || 'Could not fetch Dhan balance. Check your Dhan keys.';
             }
         }
     } catch (err) {
@@ -503,86 +485,92 @@ async function refreshBalance() {
     }
 }
 
-// Original account order broker: Groww (default) or Dhan. The server's cfg.broker is the source of truth.
-let liveOrderBroker = 'groww';   // broker the server will trade with (cfg.broker)
-let credsFormBroker = 'groww';   // which credentials form is showing
-let dhanTokenSaved = false;
 
-function brokerTitle(broker) {
-    return broker === 'dhan' ? 'Dhan' : 'Groww';
+function brokerTitle() {
+    return 'Dhan';
 }
 
-// Keep the header dropdown, account card and labels in step with the live broker.
+// Keep the header dropdown, account card and labels in step with the account.
 function syncBrokerLabels() {
-    const name = brokerTitle(liveOrderBroker);
     const select = document.getElementById('account-type-select');
-    if (select) select.value = currentAccountType === 'original' ? `original:${liveOrderBroker}` : 'demo';
-    const card = document.querySelector('#btn-acc-original .toggle-text strong');
-    if (card) card.textContent = `Original Account (${name})`;
+    if (select) select.value = currentAccountType === 'original' ? 'original:dhan' : 'demo';
     if (currentAccountType !== 'original') return;
     const headerLabel = document.getElementById('header-balance-label');
-    if (headerLabel) headerLabel.textContent = `${name} Live Funds`;
+    if (headerLabel) headerLabel.textContent = 'Dhan Live Funds';
     const badge = document.getElementById('live-account-badge');
-    if (badge) badge.textContent = `${name} Live`;
+    if (badge) badge.textContent = 'Dhan Live';
 }
 
-function selectLiveBroker(broker) {
-    credsFormBroker = broker === 'dhan' ? 'dhan' : 'groww';
-    document.getElementById('live-broker-btn-groww')?.classList.toggle('active', credsFormBroker === 'groww');
-    document.getElementById('live-broker-btn-dhan')?.classList.toggle('active', credsFormBroker === 'dhan');
-    document.getElementById('live-creds-groww')?.classList.toggle('hidden', credsFormBroker !== 'groww');
-    document.getElementById('live-creds-dhan')?.classList.toggle('hidden', credsFormBroker !== 'dhan');
-    const name = brokerTitle(credsFormBroker);
-    const title = document.getElementById('live-keys-title');
-    if (title) title.textContent = `${name} Trading API Credentials`;
-    const testLabel = document.getElementById('btn-test-live-label');
-    if (testLabel) testLabel.textContent = `Test ${name} Connection`;
+function selectLiveBroker() { /* only Dhan */ }
+
+function toggleKeysDrawer() {
+    document.getElementById('dhan-keys-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function testLiveBrokerKeys() {
-    return credsFormBroker === 'dhan' ? testLiveDhanKeys(true) : testLiveGrowwKeys();
+    return testLiveDhanKeys();
 }
 
-// Dhan has no separate "save": a successful test saves the token and makes Dhan the order broker.
+// Testing also saves: a successful test stores the keys on the server.
 function saveLiveBrokerKeys() {
-    return credsFormBroker === 'dhan' ? testLiveDhanKeys(false) : saveLiveGrowwKeys();
+    return testLiveDhanKeys();
 }
 
-async function testLiveDhanKeys(isTest) {
+function setDhanBadge(cfg) {
+    const badge = document.getElementById('dhan-auth-badge');
+    if (!badge) return;
+    if (!cfg?.is_connected) {
+        badge.textContent = 'Not connected';
+    } else if (cfg.data_plan && cfg.data_plan !== 'Active') {
+        badge.textContent = '🟠 Connected • Data API not active';
+    } else {
+        badge.textContent = cfg.has_auto_login ? '🟢 Connected • auto login' : '🟢 Connected';
+    }
+}
+
+async function testLiveDhanKeys() {
     if (isAlgoActive) {
-        alert('Stop the algo before changing the broker.');
+        alert('Stop the algo before changing Dhan keys.');
         return;
     }
-    const clientId = document.getElementById('live-dhan-client-id')?.value.trim();
-    const token = document.getElementById('live-dhan-token')?.value.trim();
+    const val = (id) => document.getElementById(id)?.value.trim() || '';
+    const creds = {
+        client_id: val('live-dhan-client-id'),
+        access_token: val('live-dhan-token'),
+        pin: val('live-dhan-pin'),
+        totp_secret: val('live-dhan-totp'),
+    };
     const msg = document.getElementById('broker-inline-msg');
-    if ((!clientId || !token) && !dhanTokenSaved) {
+    const hasLogin = creds.access_token || (creds.pin && creds.totp_secret);
+    if (!creds.client_id || (!hasLogin && !dhanTokenSaved && !dhanAutoLogin)) {
         if (msg) {
             msg.className = 'inline-msg err';
-            msg.textContent = 'Please enter your Dhan Client ID and Access Token.';
+            msg.textContent = 'Enter your Dhan Client ID plus an Access Token, or PIN + TOTP secret for automatic daily login.';
         }
         return;
     }
-    const btnId = isTest ? 'btn-test-live-groww' : 'btn-save-live-groww';
-    const btn = document.getElementById(btnId);
+    const btn = document.getElementById('btn-test-dhan');
     const oldHtml = btn ? btn.innerHTML : '';
     if (btn) btn.innerHTML = '<span>Connecting...</span>';
     try {
         const res = await fetch('/api/broker/test', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ broker: 'dhan', credentials: { client_id: clientId, access_token: token } })
+            body: JSON.stringify({ broker: 'dhan', credentials: creds })
         });
         const data = await res.json();
         if (msg) {
-            msg.className = data.success ? 'inline-msg ok' : 'inline-msg err';
+            msg.className = data.success ? (data.data_plan === 'Active' ? 'inline-msg ok' : 'inline-msg err') : 'inline-msg err';
             msg.textContent = data.success
-                ? `✅ ${data.message} Dhan is now the order broker. [Latency: ${data.latency_ms}ms]`
+                ? `✅ ${data.message} [Latency: ${data.latency_ms}ms]`
                 : `❌ ${data.error || 'Failed to authenticate with Dhan'}`;
         }
         if (data.success) {
-            const tokenEl = document.getElementById('live-dhan-token');
-            if (tokenEl) tokenEl.value = '';
+            ['live-dhan-token', 'live-dhan-pin', 'live-dhan-totp'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            applyDhanConfig(data.data?.dhan);
             refreshBalance();
             checkBrokerStatus();
         }
@@ -596,103 +584,19 @@ async function testLiveDhanKeys(isTest) {
     }
 }
 
-async function testLiveGrowwKeys() {
-    const btn = document.getElementById('btn-test-live-groww');
-    const key = document.getElementById('live-groww-api-key')?.value.trim();
-    const secret = document.getElementById('live-groww-api-secret')?.value.trim();
-    const msg = document.getElementById('broker-inline-msg');
-
-    if ((!key || !secret) && !growwKeysSaved) {
-        if (msg) {
-            msg.className = 'inline-msg err';
-            msg.textContent = 'Please enter both Groww API Key and API Secret.';
-        }
-        return;
-    }
-
-    if (btn) btn.innerHTML = '<span>Connecting...</span>';
-    try {
-        const res = await fetch('/api/broker/test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                broker: 'groww',
-                credentials: { api_key: key, api_secret: secret, mode: 'live' }
-            })
-        });
-        const data = await res.json();
-        if (data.success) {
-            if (msg) {
-                msg.className = 'inline-msg ok';
-                msg.textContent = `✅ ${data.message} [Round-trip Latency: ${data.latency_ms}ms]`;
-            }
-            const authBadge = document.getElementById('groww-auth-badge');
-            if (authBadge) authBadge.textContent = '🟢 Connected';
-            refreshBalance();
-            checkBrokerStatus();
-        } else {
-            if (msg) {
-                msg.className = 'inline-msg err';
-                msg.textContent = `❌ ${data.error || 'Failed to authenticate with Groww'}`;
-            }
-        }
-    } catch (e) {
-        if (msg) {
-            msg.className = 'inline-msg err';
-            msg.textContent = '❌ Network error connecting to Groww API.';
-        }
-    } finally {
-        if (btn) btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>Test Groww Connection</span>';
-    }
-}
-
-async function saveLiveGrowwKeys() {
-    const btn = document.getElementById('btn-save-live-groww');
-    const key = document.getElementById('live-groww-api-key')?.value.trim();
-    const secret = document.getElementById('live-groww-api-secret')?.value.trim();
-    const msg = document.getElementById('broker-inline-msg');
-
-    if ((!key || !secret) && !growwKeysSaved) {
-        if (msg) {
-            msg.className = 'inline-msg err';
-            msg.textContent = 'Please enter both Groww API Key and API Secret before saving.';
-        }
-        return;
-    }
-
-    if (btn) btn.innerHTML = '<span>Saving...</span>';
-    try {
-        const res = await fetch('/api/broker/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                broker: 'groww',
-                account_type: 'original',
-                groww: { api_key: key, api_secret: secret, mode: 'live' }
-            })
-        });
-        const data = await res.json();
-        if (data.success) {
-            if (msg) {
-                msg.className = 'inline-msg ok';
-                msg.textContent = '✅ Groww API credentials securely saved and engaged for Live order execution.';
-            }
-            refreshBalance();
-            checkBrokerStatus();
-        } else {
-            if (msg) {
-                msg.className = 'inline-msg err';
-                msg.textContent = `❌ ${data.error || 'Failed to save Groww config'}`;
-            }
-        }
-    } catch (e) {
-        if (msg) {
-            msg.className = 'inline-msg err';
-            msg.textContent = '❌ Error saving broker credentials.';
-        }
-    } finally {
-        if (btn) btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>Save Credentials</span>';
-    }
+function applyDhanConfig(dhan) {
+    dhanTokenSaved = !!dhan?.has_access_token;
+    dhanAutoLogin = !!dhan?.has_auto_login;
+    const client = document.getElementById('live-dhan-client-id');
+    if (client && !client.value) client.value = dhan?.client_id || '';
+    const saved = 'Saved on server • paste to replace';
+    const token = document.getElementById('live-dhan-token');
+    if (token) token.placeholder = dhanTokenSaved ? saved : 'Paste Dhan access token (valid 24 h)';
+    const pin = document.getElementById('live-dhan-pin');
+    if (pin) pin.placeholder = dhanAutoLogin ? saved : 'Dhan login PIN';
+    const totp = document.getElementById('live-dhan-totp');
+    if (totp) totp.placeholder = dhanAutoLogin ? saved : 'Text code under the TOTP QR';
+    setDhanBadge(dhan);
 }
 
 function clearLiveEvents() {
@@ -719,7 +623,9 @@ async function emergencySquareOffAll() {
 // The backtest toolbar picks what to backtest. While the algo is running it must not
 // touch the live strategy, so backtesting another strategy never prompts or switches it.
 function onQuickStrategySelect(val) {
-    if (!isAlgoActive) {
+    if (BACKTEST_ONLY_STRATEGIES.includes(val)) {
+        updateCapitalPreview();
+    } else if (!isAlgoActive) {
         selectLiveStrategy(val);
         onStrategyModeChange(val);
     } else {
@@ -843,205 +749,25 @@ function handleDayOverlayClick(event) {
     }
 }
 
-// Modal Controls - Real-Time Broker API (Groww / Zerodha Kite)
+// Dhan keys live in the "Dhan API" box on the Live tab; these keep old buttons working.
 function openBrokerModal() {
-    const overlay = document.getElementById('broker-modal-overlay');
-    if (overlay) overlay.classList.remove('hidden');
+    toggleKeysDrawer();
 }
 
-function closeBrokerModal() {
-    const overlay = document.getElementById('broker-modal-overlay');
-    if (overlay) overlay.classList.add('hidden');
-}
-
-function handleBrokerOverlayClick(event) {
-    if (event.target.id === 'broker-modal-overlay') {
-        closeBrokerModal();
-    }
-}
-
-function switchBrokerTab(broker) {
-    activeBrokerTab = broker;
-    const tabGroww = document.getElementById('tab-broker-groww');
-    const tabKite = document.getElementById('tab-broker-kite');
-    const formGroww = document.getElementById('form-broker-groww');
-    const formKite = document.getElementById('form-broker-kite');
-
-    if (broker === 'groww') {
-        if (tabGroww) tabGroww.classList.add('active');
-        if (tabKite) tabKite.classList.remove('active');
-        if (formGroww) formGroww.classList.remove('hidden');
-        if (formKite) formKite.classList.add('hidden');
-    } else {
-        if (tabGroww) tabGroww.classList.remove('active');
-        if (tabKite) tabKite.classList.add('active');
-        if (formGroww) formGroww.classList.add('hidden');
-        if (formKite) formKite.classList.remove('hidden');
-    }
-}
-
-async function testBrokerConnection() {
-    const testBtn = document.getElementById('btn-test-broker');
-    let credentials = {};
-
-    if (activeBrokerTab === 'groww') {
-        const apiKey = document.getElementById('groww-api-key')?.value.trim() || document.getElementById('live-groww-api-key')?.value.trim() || '';
-        const apiSecret = document.getElementById('groww-api-secret')?.value.trim() || document.getElementById('groww-auth-token')?.value.trim() || document.getElementById('live-groww-api-secret')?.value.trim() || '';
-        const clientId = document.getElementById('groww-client-id')?.value.trim() || 'Groww Trader';
-        const mode = document.querySelector('input[name="groww-mode"]:checked')?.value || 'live';
-
-        if (!apiKey && !growwKeysSaved) {
-            setBrokerAlert('error', 'Groww Validation Error', 'Please enter your Groww API Key.');
-            return;
-        }
-        credentials = { client_id: clientId, api_key: apiKey, api_secret: apiSecret, auth_token: apiSecret, mode: mode };
-    } else {
-        const apiKey = document.getElementById('kite-api-key').value.trim();
-        const apiSecret = document.getElementById('kite-api-secret').value.trim();
-        const accessToken = document.getElementById('kite-access-token').value.trim();
-        const mode = document.querySelector('input[name="kite-mode"]:checked')?.value || 'paper';
-
-        if (!apiKey) {
-            setBrokerAlert('error', 'Kite Validation Error', 'Please enter your Zerodha Kite Connect API Key.');
-            return;
-        }
-        credentials = { api_key: apiKey, api_secret: apiSecret, access_token: accessToken, mode: mode };
-    }
-
-    const origHtml = testBtn.innerHTML;
-    testBtn.innerHTML = `<span>Connecting...</span>`;
-    testBtn.disabled = true;
-
-    try {
-        const res = await fetch('/api/broker/test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ broker: activeBrokerTab, credentials: credentials })
-        });
-        const data = await res.json();
-        if (data.success) {
-            setBrokerAlert('success', `Connected: ${data.broker} (${data.mode})`, `${data.message} [Round-trip Latency: ${data.latency_ms}ms]`);
-            updateHeaderBrokerStatus(true, activeBrokerTab, credentials.mode);
-        } else {
-            setBrokerAlert('error', 'Connection Failed', data.error || 'Failed to authenticate with broker.');
-        }
-    } catch (err) {
-        setBrokerAlert('error', 'Network Error', 'Could not reach local broker connector.');
-    } finally {
-        testBtn.innerHTML = origHtml;
-        testBtn.disabled = false;
-    }
-}
-
-async function saveBrokerConfig() {
-    const saveBtn = document.getElementById('btn-save-broker');
-    let payload = { broker: activeBrokerTab };
-
-    if (activeBrokerTab === 'groww') {
-        const apiKey = document.getElementById('groww-api-key')?.value.trim() || document.getElementById('live-groww-api-key')?.value.trim() || '';
-        const apiSecret = document.getElementById('groww-api-secret')?.value.trim() || document.getElementById('groww-auth-token')?.value.trim() || document.getElementById('live-groww-api-secret')?.value.trim() || '';
-        const clientId = document.getElementById('groww-client-id')?.value.trim() || 'Groww Trader';
-        const mode = document.querySelector('input[name="groww-mode"]:checked')?.value || 'live';
-
-        if (!apiKey && !growwKeysSaved) {
-            setBrokerAlert('error', 'Missing Credentials', 'Please enter Groww API Key before saving.');
-            return;
-        }
-        payload.groww = { client_id: clientId, api_key: apiKey, api_secret: apiSecret, auth_token: apiSecret, mode: mode };
-    } else {
-        const apiKey = document.getElementById('kite-api-key').value.trim();
-        const apiSecret = document.getElementById('kite-api-secret').value.trim();
-        const accessToken = document.getElementById('kite-access-token').value.trim();
-        const mode = document.querySelector('input[name="kite-mode"]:checked')?.value || 'paper';
-
-        if (!apiKey) {
-            setBrokerAlert('error', 'Missing Credentials', 'Please enter Kite API Key before saving.');
-            return;
-        }
-        payload.kite = { api_key: apiKey, api_secret: apiSecret, access_token: accessToken, mode: mode };
-    }
-
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = `<span>Saving...</span>`;
-
-    try {
-        const res = await fetch('/api/broker/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (data.success) {
-            const activeMode = payload[activeBrokerTab]?.mode || 'paper';
-            setBrokerAlert('success', 'Live Configuration Saved & Engaged', `Real-time 4-branch straddle automation is now bound to ${activeBrokerTab.toUpperCase()} (${activeMode.toUpperCase()}).`);
-            updateHeaderBrokerStatus(true, activeBrokerTab, activeMode);
-            setTimeout(() => {
-                closeBrokerModal();
-            }, 1200);
-        } else {
-            setBrokerAlert('error', 'Save Error', data.error || 'Failed to save config.');
-        }
-    } catch (err) {
-        setBrokerAlert('error', 'Error', 'Failed to save broker configuration.');
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg><span>Save & Enable Live Automation</span>`;
-    }
-}
+function closeBrokerModal() { }
 
 async function checkBrokerStatus() {
     try {
         const res = await fetch('/api/broker/config');
         const data = await res.json();
         if (data.success && data.data) {
-            const cfg = data.data;
-            const broker = cfg.broker || 'groww';
-            activeBrokerTab = broker;
-            switchBrokerTab(broker);
-
-            if (cfg.groww) {
-                if (document.getElementById('groww-client-id')) document.getElementById('groww-client-id').value = cfg.groww.client_id || '';
-                if (document.getElementById('groww-api-key')) document.getElementById('groww-api-key').value = cfg.groww.api_key || '';
-                if (document.getElementById('groww-auth-token')) document.getElementById('groww-auth-token').value = cfg.groww.auth_token || '';
-                if (cfg.groww.mode) {
-                    const radio = document.querySelector(`input[name="groww-mode"][value="${cfg.groww.mode}"]`);
-                    if (radio) radio.checked = true;
-                }
-            }
-            if (cfg.kite) {
-                if (document.getElementById('kite-api-key')) document.getElementById('kite-api-key').value = cfg.kite.api_key || '';
-                if (document.getElementById('kite-api-secret')) document.getElementById('kite-api-secret').value = cfg.kite.api_secret || '';
-                if (document.getElementById('kite-access-token')) document.getElementById('kite-access-token').value = cfg.kite.access_token || '';
-                if (cfg.kite.mode) {
-                    const radio = document.querySelector(`input[name="kite-mode"][value="${cfg.kite.mode}"]`);
-                    if (radio) radio.checked = true;
-                }
-            }
-
-            growwKeysSaved = !!(cfg.groww?.has_api_key && cfg.groww?.has_api_secret);
-            ['live-groww-api-key', 'live-groww-api-secret'].forEach((id) => {
-                const el = document.getElementById(id);
-                if (el) el.placeholder = growwKeysSaved ? 'Saved on server • paste to replace' : (id.endsWith('key') ? 'Paste Groww API Key' : 'Paste Groww API Secret');
-            });
-            dhanTokenSaved = !!cfg.dhan?.has_access_token;
-            const dhanClient = document.getElementById('live-dhan-client-id');
-            if (dhanClient && !dhanClient.value) dhanClient.value = cfg.dhan?.client_id || '';
-            const dhanToken = document.getElementById('live-dhan-token');
-            if (dhanToken) dhanToken.placeholder = dhanTokenSaved ? 'Saved on server • paste a new token to replace' : 'Paste Dhan access token';
-            liveOrderBroker = broker === 'dhan' ? 'dhan' : 'groww';
-            selectLiveBroker(liveOrderBroker);
+            const dhan = data.data.dhan || {};
+            applyDhanConfig(dhan);
             syncBrokerLabels();
-            const authBadge = document.getElementById('groww-auth-badge');
-            if (authBadge) authBadge.textContent = cfg[broker]?.is_connected ? `🟢 ${broker === 'dhan' ? 'Dhan' : 'Groww'} connected` : 'Not verified';
-
-            const activeBrokerObj = cfg[broker];
             if (currentAccountType === 'demo') {
-                updateHeaderBrokerStatus(false, broker, 'paper');
-            } else if (activeBrokerObj && activeBrokerObj.is_connected) {
-                updateHeaderBrokerStatus(true, broker, activeBrokerObj.mode);
-                setBrokerAlert('success', `Active Broker: ${broker.toUpperCase()}`, `Connected in ${activeBrokerObj.mode.toUpperCase()} mode. Last synced at ${activeBrokerObj.last_connected_at || 'today'}.`);
+                updateHeaderBrokerStatus(!!dhan.is_connected, 'dhan', 'paper');
             } else {
-                updateHeaderBrokerStatus(false, broker, 'disconnected');
+                updateHeaderBrokerStatus(!!dhan.is_connected, 'dhan', 'live');
             }
         }
     } catch (err) {
@@ -1055,27 +781,15 @@ function updateHeaderBrokerStatus(isConnected, brokerName, mode) {
     if (!textEl || !dotEl) return;
 
     if (mode === 'paper' && currentAccountType === 'demo') {
-        textEl.textContent = 'Paper Trading • Simulated';
-        dotEl.className = 'status-dot pulse-amber';
+        textEl.textContent = isConnected ? 'Paper Trading • Dhan data' : 'Paper Trading • add Dhan keys';
+        dotEl.className = isConnected ? 'status-dot pulse-green' : 'status-dot pulse-amber';
     } else if (isConnected) {
-        const bLabel = brokerName === 'kite' ? 'Zerodha Kite' : (brokerName === 'dhan' ? 'Dhan API' : 'Groww API');
-        textEl.textContent = `${bLabel} (${(mode || 'LIVE').toUpperCase()})`;
+        textEl.textContent = `Dhan API (${(mode || 'LIVE').toUpperCase()})`;
         dotEl.className = 'status-dot pulse-green';
     } else {
-        textEl.textContent = 'Broker: Disconnected';
+        textEl.textContent = 'Dhan: Disconnected';
         dotEl.className = 'status-dot pulse-amber';
     }
-}
-
-function setBrokerAlert(type, title, msg) {
-    const alertBox = document.getElementById('broker-status-alert');
-    const alertTitle = document.getElementById('broker-alert-title');
-    const alertMsg = document.getElementById('broker-alert-msg');
-    if (!alertBox) return;
-
-    alertBox.className = `broker-alert broker-alert-${type}`;
-    if (alertTitle) alertTitle.textContent = title;
-    if (alertMsg) alertMsg.textContent = msg;
 }
 
 // Algo Automation Engine Controls
@@ -1129,7 +843,7 @@ function showManualTrade(mt) {
 
     const stuck = document.getElementById('manual-trade-stuck');
     if (mt.stuck_legs && mt.stuck_legs.length) {
-        stuck.textContent = `These legs were filled and could NOT be closed by the algo: ${mt.stuck_legs.join(', ')}. Check your Groww positions first so you don't double up.`;
+        stuck.textContent = `These legs were filled and could NOT be closed by the algo: ${mt.stuck_legs.join(', ')}. Check your Dhan positions first so you don't double up.`;
         stuck.classList.remove('hidden');
     } else {
         stuck.classList.add('hidden');
@@ -1267,7 +981,7 @@ function updateAlgoStatusUI(st) {
     const desc = document.getElementById('algo-status-desc');
 
     const modeLabel = (st.account_type === 'original' || currentAccountType === 'original')
-        ? `ORIGINAL (${(st.is_running || st.is_armed ? st.broker : liveOrderBroker || 'groww').toUpperCase()} LIVE)`
+        ? `ORIGINAL (${'DHAN'} LIVE)`
         : 'DEMO (PAPER TRADING)';
 
     if (isAlgoActive) {
@@ -1284,10 +998,10 @@ function updateAlgoStatusUI(st) {
         if (badge) {
             if (st.status === 'RUNNING') {
                 badge.className = 'algo-status-badge status-running';
-                badge.textContent = `● LIVE RUNNING (${st.account_type === 'original' ? (st.broker || 'GROWW').toUpperCase() : 'PAPER'})`;
+                badge.textContent = `● LIVE RUNNING (${st.account_type === 'original' ? 'DHAN' : 'PAPER'})`;
             } else if (st.status === 'ENTRY_FAILED' || st.status === 'ERROR') {
                 badge.className = 'algo-status-badge status-error';
-                badge.textContent = st.status === 'ERROR' ? '⚠ CHECK GROWW NOW' : '✖ ENTRY FAILED';
+                badge.textContent = st.status === 'ERROR' ? '⚠ CHECK DHAN NOW' : '✖ ENTRY FAILED';
             } else if (st.status === 'COMPLETED') {
                 badge.className = 'algo-status-badge status-idle';
                 badge.textContent = '✔ DONE FOR TODAY';
@@ -1391,7 +1105,7 @@ function updateAlgoStatusUI(st) {
                     <td>₹${Number(p.current_price || p.exit_price || p.entry_price || 0).toFixed(2)}</td>
                     <td><strong class="${pnlClass}">${pnlSign}₹${pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></td>
                     <td>${statusBadge}</td>
-                    <td><code style="font-size: 11px; color: var(--text-muted);">${p.order_id || 'GROWW-MKT'}</code></td>
+                    <td><code style="font-size: 11px; color: var(--text-muted);">${p.order_id || 'DHAN-MKT'}</code></td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -1576,7 +1290,8 @@ function renderDashboard(results) {
     const capitalDisplay = results.params ? `₹${results.params.capital.toLocaleString('en-IN')}` : "₹40,000";
     const lotSize = results.params?.lot_size || 65;
     const lotsNum = results.params ? results.params.initial_lots : 1;
-    const lotsDisplay = `${lotsNum} Lot${lotsNum > 1 ? 's' : ''} (${lotsNum * lotSize} CE / ${lotsNum * lotSize} PE)`;
+    const isGold = (results.strategy_id || results.strategy_mode) === 'gold_trend_futures';
+    const lotsDisplay = isGold ? `${lotsNum} Lot${lotsNum > 1 ? 's' : ''} (${lotsNum * 100} g Gold Mini)` : `${lotsNum} Lot${lotsNum > 1 ? 's' : ''} (${lotsNum * lotSize} CE / ${lotsNum * lotSize} PE)`;
 
     // Strategy Mode Label
     const stMode = results.strategy_id || results.strategy_mode || currentStrategyMode || 'hedged_selling';
@@ -1587,7 +1302,8 @@ function renderDashboard(results) {
         'nifty_1pm_drop': '1 PM Volatility Drop',
         'option_buying': 'Option Buying (Long Straddle)',
         'short_straddle': 'Classic Short Straddle',
-        'trend_hedged_straddle': 'Trend-Hedged Short Straddle'
+        'trend_hedged_straddle': 'Trend-Hedged Short Straddle',
+        'gold_trend_futures': 'Gold Mini Trend Futures'
     };
     const modeText = results.strategy_name || stratNames[stMode] || stMode;
 
@@ -1621,7 +1337,9 @@ function renderDashboard(results) {
     }
 
     const barGuard = document.getElementById('bar-guard-val');
-    if (barGuard && results.params) {
+    if (barGuard && isGold) {
+        barGuard.textContent = 'SL 0.5% • Target +1% • Exit 11:00 PM';
+    } else if (barGuard && results.params) {
         barGuard.textContent = `SL ${(results.params.sl_pct * 100).toFixed(0)}% • Target +₹${Math.round(results.params.pl_target).toLocaleString('en-IN')} • Stop ₹${Math.round(results.params.pl_stop).toLocaleString('en-IN')}`;
     }
 

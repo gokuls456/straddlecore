@@ -106,7 +106,7 @@ def format_manual_trade(mt: Dict[str, Any]) -> str:
     """The 'place this by hand' alert, mirroring the in-page popup."""
     lines: List[str] = ["🚨 <b>Algo entry failed: place this trade manually</b>", f"Reason: {esc(mt.get('reason', ''))}", ""]
     if mt.get("stuck_legs"):
-        lines += [f"⚠️ <b>Already filled and NOT closed:</b> {esc(', '.join(mt['stuck_legs']))}. Check Groww/Dhan positions first.", ""]
+        lines += [f"⚠️ <b>Already filled and NOT closed:</b> {esc(', '.join(mt['stuck_legs']))}. Check your Dhan positions first.", ""]
     for i, leg in enumerate(mt.get("legs", []), 1):
         icon = "🟢" if leg["side"] == "BUY" else "🔴"
         line = f"{i}. {icon} <b>{leg['side']}</b> <code>{esc(leg['trading_symbol'])}</code> × {leg['qty']} @ ~₹{leg['ref_price']:,.2f}"

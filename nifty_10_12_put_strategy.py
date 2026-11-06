@@ -408,7 +408,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Nifty Bearish Setup Backtester")
     parser.add_argument("--start", type=str, help="Start date (YYYY-MM-DD)", default=(datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
     parser.add_argument("--end", type=str, help="End date (YYYY-MM-DD)", default=datetime.now().strftime('%Y-%m-%d'))
-    parser.add_argument("--real", action="store_true", help="Fetch real Nifty data using yfinance (Note: Yahoo limits 1m data to the last 7 days)")
+    parser.add_argument("--real", action="store_true", help="Fetch real NIFTY 3-min candles from Dhan (needs Dhan keys + Data API plan)")
     args = parser.parse_args()
 
     start_dt = datetime.strptime(args.start, "%Y-%m-%d")
@@ -417,38 +417,18 @@ if __name__ == "__main__":
     hist_data = pd.DataFrame()
 
     if args.real:
-        print(f"\n{Colors.YELLOW}Attempting to fetch real 3-minute market data via TradingView from {args.start} to {args.end}...{Colors.RESET}")
+        print(f"\n{Colors.YELLOW}Fetching real 3-minute NIFTY candles from Dhan for {args.start} to {args.end}...{Colors.RESET}")
         try:
-            # We use tvdatafeed to bypass the 7-day 1m limit of Yahoo Finance. 
-            # TradingView allows fetching up to ~5000 historical intraday bars for free (~40 trading days for 3-min).
-            from tvDatafeed import TvDatafeed, Interval
-            
-            import logging
-            logging.getLogger('tvDatafeed').setLevel(logging.CRITICAL) # Suppress tvdatafeed init warnings
-            
-            tv = TvDatafeed()
-            # Fetch 5000 bars of 3-minute data for NIFTY
-            raw_data = tv.get_hist(symbol='NIFTY', exchange='NSE', interval=Interval.in_3_minute, n_bars=5000)
-            
-            if raw_data is not None and not raw_data.empty:
-                # Slice the data according to the custom dates requested
-                mask = (raw_data.index >= args.start) & (raw_data.index <= args.end + " 23:59:59")
-                hist_data = raw_data.loc[mask].copy()
-                
-                if not hist_data.empty:
-                    # Drop unnecessary columns
-                    hist_data.drop(columns=['symbol', 'volume'], inplace=True, errors='ignore')
-                    print(f"{Colors.GREEN}Successfully fetched {len(hist_data)} real 3-min candles directly from TradingView!{Colors.RESET}")
-                else:
-                    print(f"{Colors.RED}Data for {args.start} to {args.end} is too far in the past. Free TradingView tier only goes back ~40 trading days for 3min candles. Falling back to dummy data...{Colors.RESET}")
-                    hist_data = pd.DataFrame()
+            from engine.dhan_client import nifty_candles
+
+            hist_data = nifty_candles(args.start, args.end, minutes=3)
+            if hist_data.empty:
+                print(f"{Colors.RED}Dhan returned no candles for {args.start} to {args.end}. Falling back to dummy data...{Colors.RESET}")
             else:
-                print(f"{Colors.RED}Failed to fetch data from TradingView. Falling back to dummy data...{Colors.RESET}")
-                
-        except ImportError:
-            print(f"{Colors.RED}tvdatafeed library not found. Please install using `pip install --upgrade --no-cache-dir git+https://github.com/rongardF/tvdatafeed.git`. Falling back to dummy data...{Colors.RESET}")
+                print(f"{Colors.GREEN}Fetched {len(hist_data)} real 3-min candles from Dhan.{Colors.RESET}")
         except Exception as e:
-            print(f"{Colors.RED}Error fetching real data from TradingView: {e}. Falling back to dummy data...{Colors.RESET}")
+            print(f"{Colors.RED}Error fetching Dhan data: {e}. Falling back to dummy data...{Colors.RESET}")
+            hist_data = pd.DataFrame()
 
     if hist_data.empty:
         print(f"\n{Colors.YELLOW}Generating synthetic trend data from {args.start} to {args.end}...{Colors.RESET}")
