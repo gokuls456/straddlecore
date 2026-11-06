@@ -6,9 +6,9 @@
   ]
  },
  "date": "2026-11-05",
- "last_tick": "15:39:59",
+ "last_tick": "",
  "price_source": "INDstocks (not connected yet)",
- "quotes_error": "INDstocks option chain was empty",
+ "quotes_error": "",
  "last_error": "",
  "running": false,
  "strategies": [
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-05 15:40:29 IST"
+ "updated_at": "2026-11-06 09:00:49 IST"
 }
