@@ -6,7 +6,7 @@
   ]
  },
  "date": "2026-11-06",
- "last_tick": "13:36:32",
+ "last_tick": "13:43:36",
  "price_source": "INDstocks (not connected yet)",
  "quotes_error": "INDstocks option chain was empty",
  "last_error": "",
@@ -15,69 +15,10 @@
   {
    "id": "hedged_selling",
    "name": "Iron Butterfly",
-   "status": "OPEN",
-   "note": "Re-entry 15 min after stop-loss",
-   "pnl": -38.35,
-   "open_trade": {
-    "kind": "seller",
-    "legs": [
-     {
-      "symbol": "NIFTY 10 NOV 24900 CE",
-      "strike": 24900,
-      "opt": "CE",
-      "side": "BUY",
-      "qty": 65,
-      "entry": 72.02,
-      "cur": 102.22,
-      "high": 103.96,
-      "sl": null,
-      "live": false
-     },
-     {
-      "symbol": "NIFTY 10 NOV 24300 PE",
-      "strike": 24300,
-      "opt": "PE",
-      "side": "BUY",
-      "qty": 65,
-      "entry": 53.65,
-      "cur": 24.59,
-      "high": 60.53,
-      "sl": null,
-      "live": false
-     },
-     {
-      "symbol": "NIFTY 10 NOV 24600 CE",
-      "strike": 24600,
-      "opt": "CE",
-      "side": "SELL",
-      "qty": 65,
-      "entry": 190.02,
-      "cur": 254.89,
-      "high": 257.01,
-      "sl": 266.03,
-      "live": false
-     },
-     {
-      "symbol": "NIFTY 10 NOV 24600 PE",
-      "strike": 24600,
-      "opt": "PE",
-      "side": "SELL",
-      "qty": 65,
-      "entry": 155.77,
-      "cur": 92.28,
-      "high": 172.18,
-      "sl": 218.08,
-      "live": false
-     }
-    ],
-    "target": 4000,
-    "stop": -4000,
-    "exit": "15:25",
-    "reentry": true,
-    "why": "Re-entry 15 min after stop-loss",
-    "entry_time": "11:15",
-    "spot": 24617.25
-   }
+   "status": "CLOSED",
+   "note": "Stop-loss hit on 24600 CE",
+   "pnl": -167.05,
+   "open_trade": null
   },
   {
    "id": "nifty_10_12_put",
@@ -143,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-06 13:36:32 IST"
+ "updated_at": "2026-11-06 13:43:36 IST"
 }

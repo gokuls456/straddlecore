@@ -5,73 +5,15 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "OPEN",
-      "note": "Re-entry 15 min after stop-loss",
-      "trade": {
-        "kind": "seller",
-        "legs": [
-          {
-            "symbol": "NIFTY 10 NOV 24900 CE",
-            "strike": 24900,
-            "opt": "CE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 72.02,
-            "cur": 102.22,
-            "high": 103.96,
-            "sl": null,
-            "live": false
-          },
-          {
-            "symbol": "NIFTY 10 NOV 24300 PE",
-            "strike": 24300,
-            "opt": "PE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 53.65,
-            "cur": 24.59,
-            "high": 60.53,
-            "sl": null,
-            "live": false
-          },
-          {
-            "symbol": "NIFTY 10 NOV 24600 CE",
-            "strike": 24600,
-            "opt": "CE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 190.02,
-            "cur": 254.89,
-            "high": 257.01,
-            "sl": 266.03,
-            "live": false
-          },
-          {
-            "symbol": "NIFTY 10 NOV 24600 PE",
-            "strike": 24600,
-            "opt": "PE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 155.77,
-            "cur": 92.28,
-            "high": 172.18,
-            "sl": 218.08,
-            "live": false
-          }
-        ],
-        "target": 4000,
-        "stop": -4000,
-        "exit": "15:25",
-        "reentry": true,
-        "why": "Re-entry 15 min after stop-loss",
-        "entry_time": "11:15",
-        "spot": 24617.25
-      },
-      "pnl": -22.75,
+      "status": "CLOSED",
+      "note": "Stop-loss hit on 24600 CE",
+      "trade": null,
+      "pnl": -167.05,
       "events": [
         "10:00 Entry @ NIFTY 24,638",
         "11:00 Exit \u2212\u20b923",
-        "11:15 Re-entry @ NIFTY 24,617"
+        "11:15 Re-entry @ NIFTY 24,617",
+        "13:43 Exit \u2212\u20b9144"
       ],
       "reentry_at": "2026-11-06T11:15:47.470438"
     }
