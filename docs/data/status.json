@@ -5,19 +5,19 @@
    "hedged_selling"
   ]
  },
- "date": "2026-11-05",
- "last_tick": "",
+ "date": "2026-11-06",
+ "last_tick": "09:16:22",
  "price_source": "INDstocks (not connected yet)",
- "quotes_error": "",
+ "quotes_error": "INDstocks option chain was empty",
  "last_error": "",
  "running": false,
  "strategies": [
   {
    "id": "hedged_selling",
    "name": "Iron Butterfly",
-   "status": "CLOSED",
-   "note": "Time exit",
-   "pnl": 387.4,
+   "status": "WAITING",
+   "note": "",
+   "pnl": 0.0,
    "open_trade": null
   },
   {
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-06 09:10:51 IST"
+ "updated_at": "2026-11-06 09:16:22 IST"
 }
