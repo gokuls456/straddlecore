@@ -1,7 +1,7 @@
 {
   "date": "2026-11-06",
   "announced": true,
-  "summary_sent": false,
+  "summary_sent": true,
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {

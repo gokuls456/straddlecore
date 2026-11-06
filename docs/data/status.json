@@ -6,7 +6,7 @@
   ]
  },
  "date": "2026-11-06",
- "last_tick": "15:24:12",
+ "last_tick": "15:34:16",
  "price_source": "INDstocks (not connected yet)",
  "quotes_error": "INDstocks option chain was empty",
  "last_error": "",
@@ -70,12 +70,12 @@
   }
  ],
  "totals": {
-  "week": -1995.5,
-  "month": -1995.5,
-  "all": -1995.5,
-  "days": 4,
+  "week": -2162.55,
+  "month": -2162.55,
+  "all": -2162.55,
+  "days": 5,
   "per_strategy": {
-   "hedged_selling": 1085.5,
+   "hedged_selling": 918.45,
    "nifty_10_12_put": 0.0,
    "nifty_gap_drive": -1800.5,
    "nifty_1pm_drop": 955.5,
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-06 15:24:12 IST"
+ "updated_at": "2026-11-06 15:34:16 IST"
 }
