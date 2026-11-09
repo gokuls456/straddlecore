@@ -1,21 +1,15 @@
 {
-  "date": "2026-11-06",
+  "date": "2026-11-09",
   "announced": true,
-  "summary_sent": true,
+  "summary_sent": false,
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "CLOSED",
-      "note": "Stop-loss hit on 24600 CE",
+      "status": "WAITING",
+      "note": "",
       "trade": null,
-      "pnl": -167.05,
-      "events": [
-        "10:00 Entry @ NIFTY 24,638",
-        "11:00 Exit \u2212\u20b923",
-        "11:15 Re-entry @ NIFTY 24,617",
-        "13:43 Exit \u2212\u20b9144"
-      ],
-      "reentry_at": "2026-11-06T11:15:47.470438"
+      "pnl": 0.0,
+      "events": []
     }
   }
 }
