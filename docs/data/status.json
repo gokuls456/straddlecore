@@ -5,8 +5,8 @@
    "hedged_selling"
   ]
  },
- "date": "2026-11-09",
- "last_tick": "",
+ "date": "2026-11-10",
+ "last_tick": "09:21:19",
  "price_source": "Dhan (not connected yet)",
  "quotes_error": "",
  "last_error": "",
@@ -15,9 +15,9 @@
   {
    "id": "hedged_selling",
    "name": "Iron Butterfly",
-   "status": "CLOSED",
-   "note": "Stop-loss hit on 24900 CE",
-   "pnl": 279.5,
+   "status": "WAITING",
+   "note": "",
+   "pnl": 0.0,
    "open_trade": null
   },
   {
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-10 09:20:18 IST"
+ "updated_at": "2026-11-10 09:21:19 IST"
 }
