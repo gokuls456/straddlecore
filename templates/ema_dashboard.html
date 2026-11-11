@@ -19,6 +19,7 @@
   --upbg:#163024;--downbg:#3a1d1d;--flatbg:#332c14;
   --s1:#3987e5;--s2:#d95926;--s3:#9085e9;--s4:#d55181;color-scheme:dark}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--font)}
 .wrap{max-width:1240px;margin:0 auto;padding:20px max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left));display:grid;gap:16px}
 h1{font-size:24px;margin:0}
@@ -70,6 +71,11 @@ td.r,th.r{text-align:right}
 .det p{margin:0;font-size:14px;color:var(--ink2)}
 .err{background:var(--downbg);color:var(--down);border-radius:8px;padding:12px 14px;font-weight:600}
 .foot{color:var(--muted);font-size:13px}
+.acct{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.btn{font:600 14px var(--font);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer}
+.btn:disabled{opacity:.6;cursor:wait}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#cd{min-width:3.5em;color:var(--muted)}
 .login{max-width:640px;display:grid;gap:12px}
 .login p{margin:0;color:var(--ink2)}
 .login form{display:grid;gap:8px}
@@ -95,7 +101,12 @@ td.r,th.r{text-align:right}
       <div class="seg" id="tf" role="group" aria-label="Timeframe">
         <button data-k="5">5 min</button><button data-k="15">15 min</button><button data-k="60">1 hour</button><button data-k="D">1 day</button>
       </div>
-      <div class="status" id="status"><span class="dot"></span><span id="stxt">Connecting…</span><button class="link" id="logout" hidden>Change token</button></div>
+      <div class="status" id="status"><span class="dot"></span><span id="stxt">Connecting…</span></div>
+      <div class="acct" id="acct" hidden>
+        <span class="small" id="acctTxt"></span><button class="link" id="logout" hidden>Change token</button>
+        <button class="btn" id="refreshBtn">↻ Refresh</button>
+        <label class="check" title="Refresh every 30 seconds"><input type="checkbox" id="auto"> Auto <span id="cd"></span></label>
+      </div>
     </div>
   </div>
 
@@ -107,6 +118,7 @@ td.r,th.r{text-align:right}
       <div class="trow"><input id="tok" type="password" autocomplete="off" spellcheck="false" placeholder="eyJ0eXAi…"><button type="submit" class="primary" id="connectbtn">Connect</button></div>
       <label class="check"><input type="checkbox" id="remember" checked> Remember on this device until the token expires</label>
       <div class="err" id="loginerr" hidden></div>
+      <div><button type="button" class="link" id="cancelLogin" hidden>Cancel and keep the current login</button></div>
     </form>
     <p class="small">The token stays in this browser and is sent only to this dashboard's server, which uses it to read market data from Dhan. It is never saved on the server and this page cannot place orders.</p>
   </section>
@@ -142,7 +154,7 @@ td.r,th.r{text-align:right}
     </div>
   </div>
 
-  <p class="foot"><span id="connectedAs"></span> Read-only. Data from Dhan, refreshed every 30 seconds while this page is open. Indicators describe past prices and cannot predict the next move. Not investment advice.</p>
+  <p class="foot">Read-only. Data from Dhan. With Auto on, it refreshes every 30 seconds while this page is open. Indicators describe past prices and cannot predict the next move. Not investment advice.</p>
 </div>
 
 <script>
@@ -153,26 +165,31 @@ const nf=(v,d=2)=>v==null?"–":Number(v).toLocaleString("en-IN",{minimumFractio
 const sgn=(v,d=2)=>v==null?"–":(v>0?"+":v<0?"−":"")+nf(Math.abs(v),d);
 const load=(k,f)=>{try{return localStorage.getItem(k)||f}catch{return f}};
 const save=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
-let state={k:load("ema.inst","NIFTY"),tf:load("ema.tf","5")},data=null,on=new Set([9,20,50,200]),timer=null,reqId=0;
+let state={k:load("ema.inst","NIFTY"),tf:load("ema.tf","5")},data=null,on=new Set([9,20,50,200]),reqId=0;
 let token=null;try{token=localStorage.getItem("dhan.token")||sessionStorage.getItem("dhan.token")}catch{}
 const hdrs=()=>token?{"X-Dhan-Token":token}:{};
 function storeToken(t,remember){try{localStorage.removeItem("dhan.token");sessionStorage.removeItem("dhan.token");if(t)(remember?localStorage:sessionStorage).setItem("dhan.token",t)}catch{}}
-function showLogin(msg){clearInterval(timer);reqId++;data=null;$("content").hidden=true;$("err").hidden=true;$("login").hidden=false;$("logout").hidden=true;
-  $("status").className="status err";$("stxt").textContent="Not connected";const e=$("loginerr");e.hidden=!msg;e.textContent=msg||"";$("tok").focus()}
-function showConnected(j){$("login").hidden=true;$("content").hidden=false;$("logout").hidden=j.source!=="pasted";
-  $("connectedAs").textContent=j.source==="pasted"?`Connected as ${j.client}${j.expires?`, token valid until ${j.expires}`:""}.`:`Using this server's saved Dhan login (${j.client}).`}
+const AUTO_SEC=30;
+let connected=false,busy=false,nextAt=0;
+function openLogin(msg){$("login").hidden=false;$("cancelLogin").hidden=!connected;const e=$("loginerr");e.hidden=!msg;e.textContent=msg||"";$("tok").focus()}
+function showLogin(msg){connected=false;reqId++;data=null;$("content").hidden=true;$("err").hidden=true;$("acct").hidden=true;
+  $("status").className="status err";$("stxt").textContent="Not connected";openLogin(msg)}
+function showConnected(j){connected=true;$("login").hidden=true;$("content").hidden=false;$("acct").hidden=false;$("logout").hidden=false;
+  $("acctTxt").textContent=j.source==="pasted"?`Connected · ${j.client}${j.expires?` · valid till ${j.expires.split(", ").pop()}`:""}`:`Connected · server login (${j.client})`;
+  $("acctTxt").title=j.expires?`Token valid until ${j.expires}`:""}
 async function connect(t,remember){
   const b=$("connectbtn");b.disabled=true;b.textContent="Connecting…";
   try{const r=await fetch("/api/connect",{method:"POST",headers:t?{"X-Dhan-Token":t}:{}}),j=await r.json();
-    if(!r.ok||!j.connected){if(t)showLogin(j.error||"Could not connect.");else showLogin();return false}
-    token=t||null;if(t)storeToken(t,remember);$("tok").value="";showConnected(j);refresh();schedule();return true}
-  catch(e){showLogin("Could not reach the dashboard server. Is it still running?");return false}
+    if(!r.ok||!j.connected){const m=t?(j.error||"Could not connect."):"";if(connected)openLogin(m+" Still using the current login.");else{if(t)storeToken(null);showLogin(m)}return false}
+    token=t||null;if(t)storeToken(t,remember);$("tok").value="";showConnected(j);refresh(true);return true}
+  catch(e){const m="Could not reach the dashboard server. Is it still running?";if(connected)openLogin(m);else showLogin(m);return false}
   finally{b.disabled=false;b.textContent="Connect"}}
 
 function setSeg(id,val){document.querySelectorAll(`#${id} button`).forEach(b=>b.setAttribute("aria-pressed",b.dataset.k===val))}
 function tfLabel(tf){return {"5":"5-minute","15":"15-minute","60":"1-hour","D":"daily"}[tf]}
 
-async function refresh(){
+async function refresh(force){
+  if(!connected||(busy&&!force))return;busy=true;const btn=$("refreshBtn");btn.disabled=true;btn.textContent="↻ Refreshing…";
   const id=++reqId;$("content").classList.add("loading");
   try{
     const r=await fetch(`/api/ema?symbol=${state.k}&tf=${state.tf}`,{headers:hdrs()}),j=await r.json();
@@ -185,9 +202,12 @@ async function refresh(){
     if(id!==reqId)return;
     $("err").hidden=false;$("err").textContent=e.message+(data?" Showing the last data received.":"");
     $("status").className="status err";$("stxt").textContent="Not updated";
-  }finally{if(id===reqId)$("content").classList.remove("loading")}
+  }finally{if(id===reqId){$("content").classList.remove("loading");busy=false;btn.disabled=false;btn.textContent="↻ Refresh";nextAt=Date.now()+AUTO_SEC*1000;tick()}}
 }
-function schedule(){clearInterval(timer);timer=setInterval(()=>{if(!document.hidden)refresh()},30000)}
+function tick(){if(!connected){$("cd").textContent="";return}
+  const on=$("auto").checked,left=Math.max(0,Math.ceil((nextAt-Date.now())/1000));
+  $("cd").textContent=on?(busy?"":`in ${left}s`):"";
+  if(on&&!busy&&!document.hidden&&left===0)refresh()}
 
 function render(){
   const d=data,up=(d.change||0)>=0;
@@ -249,14 +269,18 @@ function hover(ev){
 }
 function leave(){$("tip").hidden=true;$("xh").hidden=true}
 
-$("inst").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;state.k=b.dataset.k;save("ema.inst",state.k);setSeg("inst",state.k);refresh()});
-$("tf").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;state.tf=b.dataset.k;save("ema.tf",state.tf);setSeg("tf",state.tf);refresh()});
+$("inst").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;state.k=b.dataset.k;save("ema.inst",state.k);setSeg("inst",state.k);refresh(true)});
+$("tf").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;state.tf=b.dataset.k;save("ema.tf",state.tf);setSeg("tf",state.tf);refresh(true)});
 $("chips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;const n=+b.dataset.n;on.has(n)?on.delete(n):on.add(n);b.setAttribute("aria-pressed",on.has(n));draw()});
 $("plot").addEventListener("pointermove",hover);$("plot").addEventListener("pointerdown",hover);$("plot").addEventListener("pointerleave",leave);
 let rz;new ResizeObserver(()=>{clearTimeout(rz);rz=setTimeout(draw,80)}).observe($("plot"));
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&connected&&Date.now()>=nextAt)refresh()});
+$("refreshBtn").addEventListener("click",()=>refresh());
+$("auto").checked=load("ema.auto","1")==="1";$("auto").addEventListener("change",e=>{save("ema.auto",e.target.checked?"1":"0");tick()});
+setInterval(tick,1000);
 $("loginform").addEventListener("submit",e=>{e.preventDefault();const t=$("tok").value.trim();if(!t){showLogin("Paste your token first.");return}connect(t,$("remember").checked)});
-$("logout").addEventListener("click",()=>{storeToken(null);token=null;showLogin()});
+$("logout").addEventListener("click",()=>openLogin());
+$("cancelLogin").addEventListener("click",()=>{$("login").hidden=true;$("tok").value=""});
 setSeg("inst",state.k);setSeg("tf",state.tf);connect(token,true);
 </script>
 </body>
