@@ -830,7 +830,7 @@ body::after {
 }
 
 .modal-dialog-lg {
-    max-width: 880px;
+    max-width: min(1240px, 96vw);
 }
 
 @keyframes modalSlide {
@@ -1352,6 +1352,13 @@ body::after {
     font-weight: 700;
     color: var(--text-primary);
     font-family: var(--font-mono);
+}
+
+.active-config-sub {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
 }
 
 /* Capital Quick Presets */
@@ -2177,3 +2184,27 @@ body::after {
     left: 16px;
     max-width: calc(100cqw - 48px);
 }
+
+/* Session audit: totals under the positions table */
+.sub-table tfoot .totals-row td {
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    font-size: 12px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+}
+
+/* Real-data status above the KPI cards */
+.real-data-banner { margin: 0 0 14px; padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5; border: 1px solid; }
+.real-data-banner.ok { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.35); color: #a7f3d0; }
+.real-data-banner.pending { background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.35); color: #fde68a; }
+.real-data-banner.error { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.35); color: #fecaca; }
+
+/* Session audit: table scrolls sideways inside its box; thin scrollbars that don't cover data */
+.sub-table-wrap { overflow-x: auto; width: 100%; }
+.sub-table-wrap .sub-table { min-width: 100%; }
+.sub-table td, .sub-table th { white-space: nowrap; }
+#day-modal-dialog .modal-body { overflow-x: hidden; scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.35) transparent; padding-right: 16px; }
+.sub-table-wrap { scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.35) transparent; }
+#day-modal-dialog .modal-body::-webkit-scrollbar, .sub-table-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+#day-modal-dialog .modal-body::-webkit-scrollbar-thumb, .sub-table-wrap::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 6px; }
+#day-modal-dialog .modal-body::-webkit-scrollbar-track, .sub-table-wrap::-webkit-scrollbar-track { background: transparent; }

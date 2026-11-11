@@ -2,14 +2,14 @@
 Signal scanner: watches all 6 strategies during market hours and sends Telegram alerts.
 
 No orders are placed. For every strategy it alerts when the entry condition hits
-(what to buy/sell, estimated price, stop-loss, target), then follows that virtual trade
+(what to buy/sell, Dhan price, stop-loss, target), then follows that virtual trade
 and alerts on stop-loss / target / trailing / guard / time exits. A summary of all six
 strategies goes out after the close.
 
 Market data comes only from Dhan (Data API plan): NIFTY 5-minute candles and India VIX
-from Dhan's intraday charts, option premiums from Dhan's option chain. If a live option
-price is missing for a moment, a Black-Scholes estimate (India VIX as volatility) is used
-and marked "~" in the alert.
+from Dhan's intraday charts, option premiums from Dhan's option chain. Real prices only: if Dhan has no live price for a
+leg, the entry waits (retried every tick) instead of using an estimate, and an open leg keeps
+its last real price through a brief quote outage.
 
 Entry rules follow the backtest code in strategy_registry.py / straddle_engine.py.
 """
@@ -53,7 +53,7 @@ ALL_STRATEGIES = ["hedged_selling", "nifty_10_12_put", "nifty_gap_drive", "nifty
 
 SHORT_NAMES = {
     "hedged_selling": "Iron Butterfly",
-    "nifty_10_12_put": "10:12 Put",
+    "nifty_10_12_put": "First Candle Breakout",
     "nifty_gap_drive": "Gap Drive",
     "nifty_1pm_drop": "1 PM Drop",
     "option_buying": "Long Straddle",
@@ -63,14 +63,18 @@ SHORT_NAMES = {
 
 # Single-option buyers: (stop-loss %, target %, trailing % below the highest premium or None, exit time)
 BUYER_RULES = {
-    "nifty_10_12_put": (0.30, 0.60, 0.15, dtime(15, 20)),
     "nifty_gap_drive": (0.25, 0.50, None, dtime(15, 15)),
     "nifty_1pm_drop": (0.30, 0.60, 0.15, dtime(15, 15)),
 }
+FCB_SL_PTS, FCB_TGT_PTS = 15.0, 15.0   # First Candle Breakout (nifty_10_12_put): premium points
 STRADDLE_EXIT = dtime(15, 25)
 SELL_SL_PCT = 0.20
 REENTRY_SL_PCT = 0.40
 REENTRY_WAIT = timedelta(minutes=15)
+
+
+class NoLivePrice(Exception):
+    """Dhan returned no live option price for a leg."""
 
 
 def now_ist() -> datetime:
@@ -204,7 +208,11 @@ class SignalScanner:
 
     def _leg(self, now, spot, iv, strike, opt_type, side, sl_pct=None) -> Dict[str, Any]:
         live = self._live_price(now, strike, opt_type)
-        px = live or self._premium(now, spot, strike, opt_type, iv)
+        if not live:
+            q = self.quotes()
+            raise NoLivePrice(f"No Dhan price for {strike} {opt_type}"
+                              f"{': ' + q.last_error[:100] if q and q.last_error else ''}")
+        px = live
         sl = None
         if sl_pct:
             sl = round(px * (1 + sl_pct) if side == "SELL" else px * (1 - sl_pct), 2)
@@ -279,7 +287,7 @@ class SignalScanner:
             names = ", ".join(SHORT_NAMES[s] for s in strategies)
             q = self.quotes()
             atm_px = self._live_price(now, get_atm_strike(spot), "CE") if q else None
-            prices = (f"{q.name} live ✅" if atm_px else f"estimated ⚠️ ({tg.esc((q.last_error or 'no price')[:120])})") if q else "estimated"
+            prices = (f"{q.name} live ✅" if atm_px else f"not available ⚠️ ({tg.esc((q.last_error or 'no price')[:120])}): alerts wait for a real price") if q else "no Dhan keys ⚠️: alerts need Dhan prices"
             self._send(f"👀 <b>Signal scanner on</b> for {now.strftime('%a %d %b')}\nWatching: {names}\n"
                        f"NIFTY {spot:,.2f} • VIX {vix or 14:.1f} • Prices: {prices}\nNo orders are placed: alerts only.")
 
@@ -302,6 +310,8 @@ class SignalScanner:
     # ---------- entries ----------
 
     def _skip(self, st, note):
+        if note.startswith("Missed") and str(st.get("note", "")).startswith("Signal hit"):
+            note = "Skipped: signal hit but Dhan gave no option price within 15 min"
         st["status"], st["note"] = "SKIPPED", note
 
     def _too_late(self, now: datetime, at: dtime) -> bool:
@@ -341,21 +351,27 @@ class SignalScanner:
             return self._enter(sid, st, now, spot, iv, f"Gap {'up' if gap > 0 else 'down'} {gap:+.0f} pts at open", opt=opt)
 
         if sid == "nifty_10_12_put":
-            if t < dtime(10, 10):
+            # First 5-min candle breakout: first finished candle from 9:20 that breaks the 9:15 high/low.
+            if t < dtime(9, 25):
                 return
-            if self._too_late(now, dtime(10, 10)):
-                return self._skip(st, "Missed: scanner started after 10:25")
-            win = done[(done.index.time >= dtime(9, 15)) & (done.index.time <= dtime(10, 5))]
-            sig = done[(done.index.time >= dtime(10, 5)) & (done.index.time < dtime(10, 10))]
-            if len(win) < 5 or sig.empty:
-                return self._skip(st, "Not enough morning candles")
-            mid = (win["high"].max() + win["low"].min()) / 2
-            close, open_ = float(sig["close"].iloc[-1]), float(sig["open"].iloc[0])
-            bearish, below = close < open_, close < mid
-            if not (bearish or below):
-                return self._skip(st, f"No trade: 10:05 candle green and above range mid {mid:,.0f}")
-            why = " and ".join(filter(None, ["10:05 candle red" if bearish else "", f"below range mid {mid:,.0f}" if below else ""]))
-            return self._enter(sid, st, now, spot, iv, f"Weak morning: {why}", opt="PE")
+            first = done[done.index.time == dtime(9, 15)]
+            if first.empty:
+                return self._skip(st, "No 9:15 candle")
+            hi, lo = float(first["high"].iloc[0]), float(first["low"].iloc[0])
+            rng = hi - lo
+            for ts, row in done[(done.index.time >= dtime(9, 20)) & (done.index.time < dtime(14, 30))].iterrows():
+                up, down = row["high"] > hi, row["low"] < lo
+                opt = ("CE" if row["close"] >= row["open"] else "PE") if (up and down) else "CE" if up else "PE" if down else None
+                if not opt:
+                    continue
+                if self._too_late(now, (ts + timedelta(minutes=5)).time()):
+                    return self._skip(st, f"Missed: first candle broken at {ts:%H:%M}, scanner started later")
+                lvl = hi if opt == "CE" else lo
+                return self._enter(sid, st, now, spot, iv,
+                                   f"First candle {'high' if opt == 'CE' else 'low'} {lvl:,.2f} broken at {ts:%H:%M} (range {rng:.0f} pts)", opt=opt)
+            if t >= dtime(14, 35):
+                return self._skip(st, f"No trade: first candle {lo:,.0f}–{hi:,.0f} not broken by 2:30 PM")
+            return
 
         if sid == "nifty_1pm_drop":
             if t < dtime(13, 20):
@@ -371,9 +387,22 @@ class SignalScanner:
             return self._enter(sid, st, now, spot, iv, f"{red} of {len(win)} candles red 12:45–1:15 PM", opt="PE")
 
     def _enter(self, sid, st, now, spot, iv, why, opt=None, reentry=False):
+        try:
+            return self._enter_legs(sid, st, now, spot, iv, why, opt, reentry)
+        except NoLivePrice as exc:
+            # Real prices only: stay WAITING / REENTRY_WAIT and try again next tick.
+            st["note"] = f"Signal hit ({why}) but waiting for a Dhan price: {exc}"
+            logger.warning("%s: %s", sid, st["note"])
+
+    def _enter_legs(self, sid, st, now, spot, iv, why, opt=None, reentry=False):
         atm = get_atm_strike(spot)
         cap = self._capital()
-        if sid in BUYER_RULES:
+        if sid == "nifty_10_12_put":
+            # Stop-loss 15 points / target 15 points on the option premium.
+            leg = self._leg(now, spot, iv, atm, opt, "BUY")
+            leg["sl"], leg["target"] = round(leg["entry"] - FCB_SL_PTS, 2), round(leg["entry"] + FCB_TGT_PTS, 2)
+            trade = {"kind": "buyer", "legs": [leg], "trail": None, "exit": "15:15"}
+        elif sid in BUYER_RULES:
             sl_pct, tgt_pct, trail, exit_t = BUYER_RULES[sid]
             leg = self._leg(now, spot, iv, atm, opt, "BUY", sl_pct)
             leg["target"] = round(leg["entry"] * (1 + tgt_pct), 2)
@@ -412,8 +441,7 @@ class SignalScanner:
             live = self._live_price(now, l["strike"], l["opt"])
             if live:
                 l["cur"] = live
-            elif not l.get("live"):
-                l["cur"] = self._premium(now, spot, l["strike"], l["opt"], iv)
+            # No live price this tick: keep the last real price (never an estimate).
             # A leg priced from Dhan keeps its last real price through a brief quote outage
             # rather than jumping to the estimate.
             l["high"] = max(l.get("high", l["cur"]), l["cur"])
@@ -421,7 +449,13 @@ class SignalScanner:
         reason = None
         exit_at = datetime.combine(now.date(), dtime.fromisoformat(trade["exit"]))
 
-        if trade["kind"] == "buyer":
+        if trade["kind"] == "buyer" and trade.get("sl_spot"):
+            up = trade["legs"][0]["opt"] == "CE"
+            if (spot >= trade["tgt_spot"]) if up else (spot <= trade["tgt_spot"]):
+                reason = f"🎯 Target hit (NIFTY {spot:,.2f} {'≥' if up else '≤'} {trade['tgt_spot']:,.2f})"
+            elif (spot <= trade["sl_spot"]) if up else (spot >= trade["sl_spot"]):
+                reason = f"🛑 Stop-loss hit (NIFTY {spot:,.2f} {'≤' if up else '≥'} {trade['sl_spot']:,.2f})"
+        elif trade["kind"] == "buyer":
             l = trade["legs"][0]
             stop = l["sl"]
             if trade.get("trail"):
@@ -475,8 +509,8 @@ class SignalScanner:
                      f"🟢 <b>NIFTY {l['strike']} {l['opt']}</b>",
                      f"Expiry {expiry} · Qty {l['qty']}",
                      f"Buy at ₹{l['entry']:,.2f}" if live else f"Buy at ~₹{l['entry']:,.0f}", "",
-                     f"🛑 Stop-loss  {rs(l['sl'])}",
-                     f"🎯 Target  {rs(l['target'])}"]
+                     *([f"🛑 Stop-loss  NIFTY {trade['sl_spot']:,.2f}", f"🎯 Target  NIFTY {trade['tgt_spot']:,.2f} (1:2)"]
+                       if trade.get("sl_spot") else [f"🛑 Stop-loss  {rs(l['sl'])}", f"🎯 Target  {rs(l['target'])}"])]
             if trade.get("trail"):
                 lines.append(f"📈 After it rises, trail SL {int(trade['trail'] * 100)}% below the high")
         else:
@@ -558,13 +592,23 @@ class SignalScanner:
     # ---------- UI ----------
 
     def sample_text(self) -> str:
-        """A made-up 10:12 Put signal so the user can check the message format."""
-        now = now_ist().replace(hour=10, minute=10)
+        """A made-up First Candle Breakout signal so the user can check the message format."""
+        now = now_ist().replace(hour=9, minute=35)
         spot, iv = 23053.10, 0.153
-        leg = self._leg(now, spot, iv, get_atm_strike(spot), "PE", "BUY", 0.30)
-        leg["target"] = round(leg["entry"] * 1.60, 2)
-        trade = {"kind": "buyer", "legs": [leg], "trail": 0.15, "exit": "15:20", "spot": spot,
-                 "why": "Weak morning: 10:05 candle red"}
+        try:   # use today's NIFTY so the sample strike is ATM and its Dhan price makes sense
+            from engine.dhan_client import get_client
+            spot = get_client().nifty_spot() or spot
+        except Exception:
+            pass
+        strike = get_atm_strike(spot)
+        try:
+            leg = self._leg(now, spot, iv, strike, "CE", "BUY")
+        except NoLivePrice:   # no Dhan price right now: the sample shows a placeholder price
+            leg = {"symbol": self._symbol(now, strike, "CE"), "strike": strike, "opt": "CE", "side": "BUY",
+                   "qty": LOT_SIZE, "entry": 100.0, "cur": 100.0, "high": 100.0, "sl": None, "live": True}
+        leg["sl"], leg["target"] = round(leg["entry"] - FCB_SL_PTS, 2), round(leg["entry"] + FCB_TGT_PTS, 2)
+        trade = {"kind": "buyer", "legs": [leg], "trail": None, "exit": "15:15", "spot": spot,
+                 "why": f"First candle high {spot - 1:,.2f} broken at 9:30 (sample)"}
         return "🧪 <i>Sample only, not a real signal</i>\n\n" + self._entry_text("nifty_10_12_put", trade, now, iv, False)
 
     def get_status(self) -> Dict[str, Any]:

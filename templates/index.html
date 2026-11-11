@@ -28,10 +28,12 @@
                 </div>
                 <div class="strategy-badge">
                     <span class="status-dot pulse-green"></span>
-                    <span>4-Branch Parallel Engine • Active</span>
+                    <span>Backtests + Telegram Alerts</span>
                 </div>
             </div>
             <div class="header-right">
+                <!-- LIVE TRADING DISABLED: backtest + Telegram alerts only. Remove style="display:none" to bring back. -->
+                <div style="display:none">
                 <div class="account-selector-wrap">
                     <span class="pill-label">Trading Mode</span>
                     <select id="account-type-select" class="account-select" onchange="onAccountTypeChange(this.value)">
@@ -40,13 +42,6 @@
                         <option value="original:dhan">🔵 Original Account (Dhan Live API)</option>
                         -->
                     </select>
-                </div>
-                <div class="balance-pill" id="balance-pill" title="Click to edit demo capital" onclick="onBalancePillClick()">
-                    <span class="pill-label" id="header-balance-label">Demo Capital</span>
-                    <span class="pill-val text-success" id="header-balance-val">—</span>
-                    <span class="pill-edit-icon" id="header-balance-edit">✎</span>
-                    <input type="text" id="header-capital-input" class="pill-input hidden" placeholder="e.g. 50k or 1L"
-                           onkeydown="onCapitalInputKey(event)" onblur="saveDemoCapital()" onclick="event.stopPropagation()">
                 </div>
                 <div class="broker-status-pill" id="broker-status-pill" onclick="toggleKeysDrawer()">
                     <span class="status-dot pulse-amber" id="broker-dot"></span>
@@ -58,6 +53,8 @@
                     <span id="algo-btn-icon">▶</span>
                     <span id="algo-btn-text">Start Algo</span>
                 </button>
+                </div>
+                <!-- /LIVE TRADING DISABLED -->
                 
                 <button id="export-csv-btn" class="btn btn-secondary" onclick="exportCSV()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -69,28 +66,29 @@
         <!-- Main Content Body -->
         <main class="app-main">
             <div class="studio-tabs">
-                <button class="studio-tab active" id="tab-live-desk" onclick="switchStudioTab('live')">
-                    <span>⚡ Live Execution Desk</span>
-                </button>
-                <button class="studio-tab" id="tab-backtest-studio" onclick="switchStudioTab('backtest')">
+                <!-- ⚡ Live Execution Desk disabled for now: this tab only shows Telegram alerts + Dhan keys. -->
+                <button class="studio-tab active" id="tab-backtest-studio" onclick="switchStudioTab('backtest')">
                     <span>📊 Multi-Strategy Backtest Studio</span>
+                </button>
+                <button class="studio-tab" id="tab-live-desk" onclick="switchStudioTab('live')">
+                    <span>📲 Telegram Alerts &amp; Dhan Keys</span>
                 </button>
             </div>
 
-            <section id="live-desk-panel" class="live-desk">
-                <div class="live-top-grid">
+            <section id="live-desk-panel" class="live-desk hidden">
+                <div class="live-top-grid" style="grid-template-columns: 1fr;">
                     <!-- ACCOUNT & CAPITAL CARD -->
                     <div class="section-card live-account-card">
                         <div class="section-header">
                             <div class="section-title-wrap">
                                 <span class="section-icon">🏦</span>
-                                <h2 class="section-title">Trading Account & Capital</h2>
+                                <h2 class="section-title">Trading Account</h2>
                             </div>
                             <span class="badge badge-outline" id="live-account-badge">Demo Paper</span>
                         </div>
 
-                        <!-- Account Switcher Buttons -->
-                        <div class="account-toggle-group">
+                        <!-- Account Switcher Buttons (LIVE TRADING DISABLED) -->
+                        <div class="account-toggle-group" style="display:none">
                             <button type="button" class="account-toggle-btn active" id="btn-acc-demo" onclick="switchAccount('demo')">
                                 <span class="toggle-icon">🧪</span>
                                 <div class="toggle-text">
@@ -107,35 +105,6 @@
                                 </div>
                             </button>
                             -->
-                        </div>
-
-                        <!-- Balances & Auto-Filled Capital Row -->
-                        <div class="account-balance-boxes">
-                            <div class="bal-box bal-primary">
-                                <span class="bal-label" id="live-bal-title">Demo Virtual Cash</span>
-                                <div class="bal-val" id="live-balance-value">—</div>
-                                <span class="bal-sub" id="live-bal-ucc">Simulated Paper Trading</span>
-                            </div>
-                            <div class="bal-box bal-secondary live-only hidden">
-                                <span class="bal-label">Allocated Algo Capital</span>
-                                <div class="bal-val text-cyan" id="live-capital-value">—</div>
-                                <span class="bal-sub" id="live-capital-sub">Uses full demo cash</span>
-                                <div class="alloc-controls">
-                                    <button type="button" class="btn btn-xs btn-outline" id="btn-alloc-custom" onclick="startCustomAllocation()">✎ Custom</button>
-                                    <button type="button" class="btn btn-xs btn-outline" id="btn-alloc-full" onclick="setAllocation('full')">Use Full Funds</button>
-                                    <input type="text" id="alloc-custom-input" class="form-input form-input-mono alloc-input hidden" placeholder="e.g. 40k"
-                                           onkeydown="onAllocInputKey(event)" onblur="saveCustomAllocation()">
-                                </div>
-                            </div>
-                            <div class="bal-action-col">
-                                <button class="btn btn-sm btn-outline live-only hidden" onclick="refreshBalance()" title="Sync live balance from Dhan">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                                    <span>Sync</span>
-                                </button>
-                                <button class="btn btn-sm btn-outline live-only hidden" id="btn-toggle-keys" onclick="toggleKeysDrawer()" title="View or edit Dhan API keys">
-                                    <span>🔑 Dhan Keys</span>
-                                </button>
-                            </div>
                         </div>
 
                         <!-- Dhan API: the only broker and market-data source (backtests, signals, live prices, orders) -->
@@ -231,8 +200,8 @@
                         </div>
                     </div>
 
-                    <!-- MULTI-STRATEGY SELECTION CARD -->
-                    <div class="section-card">
+                    <!-- MULTI-STRATEGY SELECTION CARD (LIVE TRADING DISABLED) -->
+                    <div class="section-card" style="display:none">
                         <div class="section-header">
                             <div class="section-title-wrap">
                                 <span class="section-icon">🎯</span>
@@ -294,6 +263,8 @@
                     </div>
                 </div>
 
+                <!-- LIVE TRADING DISABLED: algo bar, live KPIs, positions and order log are hidden. -->
+                <div style="display:none">
                 <!-- Live Algo Automation Execution Bar -->
                 <div class="algo-execution-bar" id="algo-execution-bar">
                     <div class="algo-bar-left">
@@ -392,17 +363,20 @@
                         </div>
                     </div>
                 </div>
+            </div>
+                <!-- /LIVE TRADING DISABLED -->
             </section>
 
-            <div id="backtest-studio-panel" class="hidden">
+            <div id="backtest-studio-panel">
             <div class="backtest-toolbar">
                 <div class="toolbar-strategy-select-wrap">
                     <span class="toolbar-label">Strategy:</span>
                     <select id="bt-quick-strategy" class="form-select toolbar-select" onchange="onQuickStrategySelect(this.value)">
                         <option value="hedged_selling" selected>⚡ Hedged Selling (Iron Butterfly)</option>
-                        <option value="nifty_10_12_put">📉 10:12 Bearish Put Breakdown</option>
+                        <option value="nifty_10_12_put">📈 First Candle Breakout (All Day, SL 15 / TP 15)</option>
                         <option value="nifty_gap_drive">🚀 Nifty Gap Drive Momentum</option>
                         <option value="nifty_1pm_drop">💥 1 PM Volatility Drop</option>
+                        <option value="nifty_orb_945">📐 First Candle Breakout (by 9:45, 1:2)</option>
                         <option value="option_buying">🎯 Option Buying (Long Straddle)</option>
                         <option value="short_straddle">🏛️ Classic Short Straddle</option>
                         <option value="trend_hedged_straddle">🧭 Trend-Hedged Straddle</option>
@@ -438,15 +412,15 @@
                 <div class="section-header arch-toggle" onclick="toggleArchitecture()" title="Show / hide strategy explanation">
                     <div class="section-title-wrap">
                         <span class="section-icon">🔀</span>
-                        <h2 class="section-title">Automated Multi-Branch Strategy Architecture</h2>
+                        <h2 class="section-title" id="arch-title">How this strategy works</h2>
                     </div>
-                    <span class="badge badge-outline" id="arch-toggle-label">Show ▾</span>
+                    <span class="badge badge-outline" id="arch-toggle-label">Hide ▴</span>
                 </div>
-                <div id="arch-body" class="hidden">
+                <div id="arch-body">
                 
                 <div class="flowchart-container">
                     <!-- Root Node -->
-                    <div class="flow-root-node">
+                    <div class="flow-root-node" id="arch-root">
                         <div class="node-badge">START TRIGGER</div>
                         <div class="node-title">10:00 AM IST (Mon-Fri)</div>
                         <div class="node-desc">Underlying: NIFTY 50 Options (Current Weekly Expiry)</div>
@@ -459,7 +433,7 @@
                     </div>
 
                     <!-- 4 Parallel Branches Grid -->
-                    <div class="branches-grid">
+                    <div class="branches-grid" id="arch-branches">
                         <!-- Branch 1 -->
                         <div class="branch-card branch-ce">
                             <div class="branch-header">
@@ -574,7 +548,7 @@
                     <div class="spinner"></div>
                     <div class="loading-text">
                         <strong id="loading-title">Executing Multi-Period Intraday Backtest...</strong>
-                        <span id="loading-subtitle">Simulating 1-second/5-minute path, Black-Scholes Greeks, leg stop-loss triggers & re-entries</span>
+                        <span id="loading-subtitle">Replaying real Dhan NIFTY and option candles: entries, stop-losses, targets and re-entries</span>
                     </div>
                 </div>
             </div>
@@ -598,15 +572,16 @@
                 <div class="active-config-item">
                     <span class="active-config-icon">💰</span>
                     <div class="active-config-info">
-                        <span class="active-config-label">Configured Capital</span>
-                        <strong class="active-config-value text-cyan" id="bar-capital-val">₹40,000</strong>
+                        <span class="active-config-label">Capital Needed</span>
+                        <strong class="active-config-value text-cyan" id="bar-capital-val">—</strong>
+                        <small class="active-config-sub" id="bar-capital-sub"></small>
                     </div>
                 </div>
                 <div class="active-config-item">
                     <span class="active-config-icon">📊</span>
                     <div class="active-config-info">
                         <span class="active-config-label">Position Sizing</span>
-                        <strong class="active-config-value" id="bar-lots-val">Auto-Sized by Capital</strong>
+                        <strong class="active-config-value" id="bar-lots-val">1 Lot</strong>
                     </div>
                 </div>
                 <div class="active-config-item">
@@ -626,6 +601,8 @@
             </div>
 
             <!-- KPI Summary Cards Grid -->
+            <div id="real-data-banner" class="real-data-banner hidden"></div>
+
             <section class="kpi-grid">
                 <div class="kpi-card" id="kpi-net-pnl">
                     <div class="kpi-top">
@@ -694,7 +671,7 @@
                     </div>
                     <div class="kpi-value" id="val-avg-daily">₹0.00</div>
                     <div class="kpi-footer">
-                        <span>Capital: <strong id="val-capital-used">₹5,00,000</strong></span>
+                        <span>Needs: <strong id="val-capital-used">—</strong></span>
                         <span>Period: <strong id="val-period-used">1 Year</strong></span>
                     </div>
                 </div>
@@ -825,7 +802,7 @@
             <div class="modal-header">
                 <div>
                     <h3 class="modal-title">⚙️ Backtest Configuration</h3>
-                    <div class="modal-subtitle">Lots, risk &amp; execution settings</div>
+                    <div class="modal-subtitle">Lots, slippage, stop-loss &amp; guard settings</div>
                 </div>
                 <button class="modal-close-btn" onclick="closeConfigModal()" title="Close">&times;</button>
             </div>
@@ -833,36 +810,21 @@
             <!-- Modal Body -->
             <div class="modal-body">
                 <div class="modal-context-line" id="modal-context-line">
-                    <!-- Filled by JS: strategy & period from toolbar, capital from header -->
+                    <!-- Filled by JS: strategy & period from the toolbar -->
                 </div>
 
                 <!-- 2. Out-of-sample Toggle -->
                 <div class="form-group-checkbox">
                     <label class="toggle-label">
-                        <input type="checkbox" id="cfg-exclude-last-30">
+                        <input type="checkbox" id="cfg-exclude-last-30" autocomplete="off">
                         <span class="toggle-text">Exclude recent 30 days (Out-of-sample forward test)</span>
                     </label>
-                </div>
-
-                <!-- 4. Position Sizing Mode -->
-                <div class="form-group">
-                    <label class="form-label">Position Sizing & Lot Calculation</label>
-                    <div class="radio-pill-group">
-                        <label class="radio-pill">
-                            <input type="radio" name="cfg-sizing-mode" value="auto_capital" checked onchange="updateCapitalPreview()">
-                            <span><strong>Auto-Scale by Capital</strong> (lots sized from your capital)</span>
-                        </label>
-                        <label class="radio-pill">
-                            <input type="radio" name="cfg-sizing-mode" value="fixed_lots" onchange="updateCapitalPreview()">
-                            <span><strong>Fixed Lots Rule</strong> (Always fixed lots below)</span>
-                        </label>
-                    </div>
                 </div>
 
                 <!-- 5. Strategy Parameters Grid (Simple & Visible) -->
                 <div class="form-grid-2">
                     <div class="form-group">
-                        <label class="form-label" for="cfg-initial-lots">Lots Traded (CE & PE)</label>
+                        <label class="form-label" for="cfg-initial-lots">Lots per Leg</label>
                         <input type="number" id="cfg-initial-lots" class="form-input" value="1" min="1" max="100" oninput="onLotsEdited()">
                     </div>
                     <div class="form-group">
@@ -883,11 +845,11 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="cfg-pl-target">P&L Guard Target (₹)</label>
-                        <input type="number" id="cfg-pl-target" class="form-input" value="15000" step="1000">
+                        <input type="number" id="cfg-pl-target" class="form-input" value="10000" step="500" oninput="guardEdited = true">
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="cfg-pl-stop">P&L Guard Stop (₹)</label>
-                        <input type="number" id="cfg-pl-stop" class="form-input" value="-15000" step="1000">
+                        <input type="number" id="cfg-pl-stop" class="form-input" value="-10000" step="500" oninput="guardEdited = true">
                     </div>
                 </div>
 
@@ -897,10 +859,8 @@
 
                 <!-- Live Configuration Summary Banner -->
                 <div class="modal-summary-card" id="modal-summary-card">
-                    <div class="summary-label">Simulation Summary</div>
-                    <div class="summary-text" id="modal-summary-text">
-                        Running <strong>1 Year</strong> backtest with <strong>₹5,00,000</strong> capital trading <strong>10 Lots</strong> CE & PE.
-                    </div>
+                    <div class="summary-label">Capital this set needs</div>
+                    <div class="summary-text" id="modal-summary-text">Checking with Dhan…</div>
                 </div>
             </div>
 
@@ -968,27 +928,35 @@
                 <!-- Leg Breakdown Table -->
                 <div class="leg-breakdown-box">
                     <h4 class="box-title">Positions Executed in this Automation</h4>
+                    <div class="sub-table-wrap">
                     <table class="data-table sub-table">
                         <thead>
                             <tr>
                                 <th>Position / Leg</th>
                                 <th>Branch</th>
-                                <th>Quantity</th>
+                                <th>Side</th>
+                                <th>Qty</th>
+                                <th>Entry Time</th>
                                 <th>Entry Premium</th>
+                                <th title="Entry premium × quantity: paid for a buy, received for a sell">Entry Value (₹)</th>
                                 <th>Exit Premium</th>
+                                <th title="Exit premium × quantity">Exit Value (₹)</th>
+                                <th>Exit Time</th>
                                 <th>Exit Reason</th>
-                                <th>Net P&L (₹)</th>
+                                <th>P&L (₹)</th>
                             </tr>
                         </thead>
                         <tbody id="day-positions-tbody">
                             <!-- Dynamic -->
                         </tbody>
+                        <tfoot id="day-positions-tfoot"></tfoot>
                     </table>
+                    </div>
                 </div>
 
                 <!-- Event Timeline Log -->
                 <div class="timeline-box">
-                    <h4 class="box-title">Chronological Automation Events</h4>
+                    <h4 class="box-title">Automation Events (latest first)</h4>
                     <div class="timeline-items" id="day-timeline-items">
                         <!-- Dynamic -->
                     </div>

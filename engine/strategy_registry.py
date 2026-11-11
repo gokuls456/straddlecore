@@ -1,17 +1,19 @@
 """
 Multi-Strategy Registry and Unified Backtest / Execution Engine.
 Supports:
-1. Hedged Selling (Iron Butterfly) — 1 Lot ATM CE/PE + OTM Wings (~₹30k margin)
+1. Hedged Selling (Iron Butterfly) — 1 Lot ATM CE/PE + OTM Wings (~₹1L margin)
 
-"capital_per_lot" on each entry is a rough estimate of capital needed for 1 lot
-(margin when selling, premium when buying). Verify against the broker margin calculator.
-2. 10:12 Bearish Put Breakdown — Morning breakdown put buyer (~₹30k capital)
+"capital_per_lot" on each entry is the fallback capital for 1 lot (margin when selling, premium
+when buying), taken from Dhan's margin calculator on 7 Nov 2026 (NIFTY ≈ 25,030). Backtest reports
+use live values from engine/margin.py and only fall back to these when Dhan is unreachable.
+2. First Candle Breakout (All Day, 1:2) — buys the side that breaks the first 5-min candle
 3. Nifty Gap Drive Momentum — Morning gap continuation buyer (~₹30k capital)
 4. 1 PM Volatility Drop — Post-lunch European open breakdown put buyer (~₹30k capital)
 5. Option Buying (Long Straddle) — ATM CE + PE buyer with risk capped (~₹30k capital)
 6. Classic Short Straddle — Naked ATM straddle seller (~₹2L margin per lot)
 7. Trend-Hedged Short Straddle — ATM straddle seller + one OTM wing on the side the market opened
-8. Gold Mini Trend Futures (backtest only) — buys/sells MCX Gold Mini by the opening direction
+8. First Candle Breakout (1:2) — buys the side that breaks the first 5-min candle by 9:45
+9. Gold Mini Trend Futures (backtest only) — buys/sells MCX Gold Mini by the opening direction
 """
 
 from __future__ import annotations
@@ -62,35 +64,35 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "id": "hedged_selling",
         "name": "Hedged Selling (Iron Butterfly)",
         "category": "Intraday Selling",
-        "badge": "Built for ₹30,000",
+        "badge": "~₹1L margin / lot",
         "badge_color": "green",
         "default_capital": 30000.0,
         "recommended_lots": 1,
         "lot_size": 65,
-        "capital_per_lot": 30000.0,
+        "capital_per_lot": 105000.0,
         "schedule": "10:00 AM IST (Mon–Fri)",
         "exit_time": "3:25 PM IST",
         "sl_rule": "20% leg SL on ATM CE & PE; +300 OTM wings protect capital",
         "reentry_rule": "15-minute wait after SL hit, re-enters 1 lot straddle",
-        "guard_rule": "±10% portfolio guard (±₹3,000 on ₹30k)",
-        "description": "Sells 1 Lot ATM Call and 1 Lot ATM Put at 10:00 AM while buying +300 OTM protective wings. Compresses NSE margin from ₹1.25L to ~₹30k–₹35k, capturing steady intraday theta decay safely.",
+        "guard_rule": "±10% of required capital, max ±₹15,000",
+        "description": "Sells 1 Lot ATM Call and 1 Lot ATM Put at 10:00 AM while buying +300 OTM protective wings. The wings cut margin from ~₹2.5L (naked straddle) to ~₹1L per lot, capturing intraday theta decay with capped risk.",
     },
     "nifty_10_12_put": {
-        "id": "nifty_10_12_put",
-        "name": "10:12 Bearish Put Breakdown",
-        "category": "Breakdown Momentum",
-        "badge": "Directional Alpha",
+        "id": "nifty_10_12_put",   # id kept so saved alert settings carry over
+        "name": "First Candle Breakout (All Day, SL 15 / TP 15)",
+        "category": "Opening Range Breakout",
+        "badge": "1:2 Risk-Reward",
         "badge_color": "cyan",
         "default_capital": 30000.0,
         "recommended_lots": 1,
         "lot_size": 65,
         "capital_per_lot": 15000.0,
-        "schedule": "10:12 AM IST (Mon–Fri)",
-        "exit_time": "3:00 PM IST",
-        "sl_rule": "30% premium SL with 15% trailing stop",
-        "reentry_rule": "Single high-conviction entry per session",
-        "guard_rule": "1:2 Risk-to-Reward Profit Target (+60% premium gain)",
-        "description": "Monitors opening range (9:15–10:06 AM). If signal candle at 10:09 AM closes bearish below range midpoint, buys ATM Put at 10:12 AM with 30% SL and 1:2 R:R target.",
+        "schedule": "From 9:20 AM until 2:30 PM IST (Mon–Fri)",
+        "exit_time": "3:15 PM IST",
+        "sl_rule": "15 points below the option's buy price",
+        "reentry_rule": "One trade a day: the first side broken",
+        "guard_rule": "Target 15 points above the buy price, else exit 3:15 PM",
+        "description": "Marks the high and low of the first 5-minute candle (9:15–9:20). The first later candle that breaks it decides the trade: high broken → buy ATM Call; low broken → buy ATM Put. Stop-loss 15 points and target 15 points on the option premium (e.g. buy ₹150 → SL ₹135, target ₹165). No break by 2:30 PM → no trade.",
     },
     "nifty_gap_drive": {
         "id": "nifty_gap_drive",
@@ -108,6 +110,23 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "reentry_rule": "Trailing profit lock once +1.5x risk achieved",
         "guard_rule": "EOD hard exit at 3:15 PM",
         "description": "Exploits opening overnight gaps (>25 pts). If the first 30-minute range confirms gap direction, enters ATM directional option with range stop-loss and trailing profit lock.",
+    },
+    "nifty_orb_945": {
+        "id": "nifty_orb_945",
+        "name": "First Candle Breakout (1:2)",
+        "category": "Opening Range Breakout",
+        "badge": "1:2 Risk-Reward",
+        "badge_color": "cyan",
+        "default_capital": 30000.0,
+        "recommended_lots": 1,
+        "lot_size": 65,
+        "capital_per_lot": 15000.0,
+        "schedule": "9:20 – 9:45 AM IST (Mon–Fri)",
+        "exit_time": "3:15 PM IST",
+        "sl_rule": "Other end of the first 5-min candle (NIFTY spot)",
+        "reentry_rule": "One trade a day: the first side broken by 9:45",
+        "guard_rule": "Target = 2 × risk on NIFTY spot (1:2), else exit 3:15 PM",
+        "description": "Marks the high and low of the first 5-minute candle (9:15–9:20). Whichever side NIFTY breaks first before 9:45 decides the trade: high broken → buy ATM Call, low broken → buy ATM Put. Stop-loss is the other end of that candle; target is twice that distance beyond the break (1:2). No break by 9:45 → no trade.",
     },
     "nifty_1pm_drop": {
         "id": "nifty_1pm_drop",
@@ -135,7 +154,7 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default_capital": 30000.0,
         "recommended_lots": 1,
         "lot_size": 65,
-        "capital_per_lot": 20000.0,
+        "capital_per_lot": 24000.0,
         "schedule": "10:00 AM IST (Mon–Fri)",
         "exit_time": "3:25 PM IST",
         "sl_rule": "Loss strictly capped at premium paid",
@@ -152,7 +171,7 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default_capital": 500000.0,
         "recommended_lots": 10,
         "lot_size": 65,
-        "capital_per_lot": 200000.0,
+        "capital_per_lot": 250000.0,
         "schedule": "10:00 AM IST (Mon–Fri)",
         "exit_time": "3:25 PM IST",
         "sl_rule": "20% leg SL on both CE and PE",
@@ -169,7 +188,7 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default_capital": 150000.0,
         "recommended_lots": 1,
         "lot_size": 65,
-        "capital_per_lot": 150000.0,
+        "capital_per_lot": 255000.0,
         "schedule": "10:00 AM IST (Mon–Fri)",
         "exit_time": "3:25 PM IST",
         "sl_rule": "20% leg SL on ATM CE & PE; one +300 OTM wing on the opening side",
@@ -186,7 +205,7 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "default_capital": 300000.0,
         "recommended_lots": 1,
         "lot_size": 100,              # grams per Gold Mini lot; prices are ₹ per 10 g
-        "capital_per_lot": 150000.0,  # rough MCX margin (~10–12% of ~₹12.6L contract value)
+        "capital_per_lot": 135000.0,  # rough MCX margin (~10–12% of ~₹12.6L contract value)
         "schedule": "10:00 AM IST (Mon–Fri, MCX)",
         "exit_time": "11:00 PM IST",
         "sl_rule": "0.5% stop-loss on the futures price",
@@ -235,8 +254,10 @@ class UnifiedStrategyRunner:
                 reentry_hedged=bool(self.params.get("reentry_hedged", False)),
                 reentry_sl_pct=float(self.params["reentry_sl_pct"]) if self.params.get("reentry_sl_pct") else None,
                 max_reentries=int(self.params["max_reentries"]) if self.params.get("max_reentries") not in (None, "") else None,
+                real_prices=True,
             )
             res = engine.run_backtest(hist_data)
+            res["skipped_days"] = engine.skipped_days
             res["strategy_id"] = self.strategy_id
             res["strategy_name"] = self.meta["name"]
             res["strategy_meta"] = self.meta
@@ -249,6 +270,8 @@ class UnifiedStrategyRunner:
             return self._run_gap_drive(hist_data)
         elif self.strategy_id == "nifty_1pm_drop":
             return self._run_1pm_drop(hist_data)
+        elif self.strategy_id == "nifty_orb_945":
+            return self._run_orb_945(hist_data)
         elif self.strategy_id == "gold_trend_futures":
             return self._run_gold_trend(hist_data)
 
@@ -256,424 +279,208 @@ class UnifiedStrategyRunner:
         # params onto engine arguments; passing them straight to the engine crashes on extras like "period").
         return UnifiedStrategyRunner("hedged_selling", **self.params).run(hist_data)
 
-    def _run_10_12_put(self, hist_data: Dict[date, pd.DataFrame]) -> Dict[str, Any]:
-        capital = float(self.params.get("capital") or 30000.0)
+    # ---------- single-option buyers, on real Dhan option candles ----------
+
+    def _buyer_params(self):
         raw_lot_size = self.params.get("lot_size")
         lot_size = int(raw_lot_size) if raw_lot_size not in (None, "", 0) else 65
         raw_lots = self.params.get("initial_lots")
         lots = int(raw_lots) if raw_lots not in (None, "", "auto", 0) else 1
-        qty = lots * lot_size
-        raw_sl = self.params.get("sl_pct")
-        premium_sl_pct = float(raw_sl) if raw_sl not in (None, "") else 0.30
-        reward_ratio = 2.0
         raw_slip = self.params.get("slippage")
-        slippage = float(raw_slip) if raw_slip not in (None, "") else 1.5
+        slippage = float(raw_slip) if raw_slip not in (None, "") else 1.0
+        return lots, lots * lot_size, slippage
 
-        trade_logs = []
-        equity_curve = []
+    def _run_buyer(self, hist_data: Dict[date, pd.DataFrame], decide, name: str) -> Dict[str, Any]:
+        """Shared loop. decide(day, df, prev_close) returns None (no trade) or a setup dict:
+          opt, entry_at (datetime: the order goes in at that candle's open), why, branch,
+          exit_at (time), and either premium rules (sl_pct, tgt_pct, trail) or spot levels
+          (sl_spot, tgt_spot) for strategies whose stop/target are on NIFTY.
+        Every price is a real Dhan option candle; a day without one is skipped, not modelled.
+        Stop-loss / target trigger on the candle low / high and fill at the level (or the candle
+        open if it gapped past it); the time exit fills at that candle's open."""
+        from engine.option_history import NoRealPrice, load_day
+
+        capital = float(self.params.get("capital") or 30000.0)
+        lots, qty, slippage = self._buyer_params()
+        trade_logs, equity_curve, skipped = [], [], []
         cum_pnl = 0.0
+        days = sorted(hist_data.keys())
 
-        for day_date in sorted(hist_data.keys()):
+        for idx, day_date in enumerate(days):
             df = hist_data[day_date]
+            prev_close = float(hist_data[days[idx - 1]]["close"].iloc[-1]) if idx else None
             if len(df) < 25:
                 continue
-
-            day_name = day_date.strftime("%A")
-            # 1. Observation window: 09:15 to 10:05
-            win_mask = (df.index.time >= time(9, 15)) & (df.index.time <= time(10, 5))
-            win_df = df[win_mask]
-            if len(win_df) < 5:
+            setup = decide(day_date, df, prev_close)
+            if not setup:
                 continue
-
-            win_high = win_df["high"].max()
-            win_low = win_df["low"].min()
-            win_mid = (win_high + win_low) / 2.0
-
-            # 2. Signal check around 10:05–10:10
-            sig_mask = (df.index.time >= time(10, 5)) & (df.index.time <= time(10, 10))
-            sig_df = df[sig_mask]
-            if sig_df.empty:
+            book = load_day(day_date, df)
+            if book is None:
+                skipped.append(f"{day_date}: no Dhan option candles")
                 continue
-
-            sig_close = sig_df["close"].iloc[-1]
-            sig_open = sig_df["open"].iloc[0]
-            is_bearish = sig_close < sig_open
-            is_below_mid = sig_close < win_mid
-
-            # Entry at 10:10 or 10:15
-            entry_mask = df.index.time >= time(10, 10)
-            entry_df = df[entry_mask]
-            if entry_df.empty or not (is_bearish or is_below_mid):
-                # No setup trigger today: record neutral day or skipped
+            opt, entry_at, exit_at = setup["opt"], setup["entry_at"], setup["exit_at"]
+            spot_rows = df[df.index >= entry_at]
+            if spot_rows.empty:
                 continue
+            spot_entry = float(spot_rows["open"].iloc[0])
+            strike = get_atm_strike(spot_entry)
+            try:
+                c = book.candles(strike, opt)
+                entry = book.price(strike, opt, entry_at, "open")
+            except NoRealPrice as exc:
+                skipped.append(str(exc))
+                continue
+            entry_time = c.index[c.index >= entry_at][0]
+            entry_with_slip = entry + slippage
 
-            entry_row = entry_df.iloc[0]
-            entry_time_str = entry_row.name.strftime("%H:%M")
-            spot_entry = entry_row["open"]
-            atm_strike = get_atm_strike(spot_entry)
-
-            # Estimate ATM Put Premium (~100 pts)
-            entry_premium = max(40.0, bs_put_price(spot_entry, atm_strike, 0.008, 0.065, 0.14))
-            entry_with_slip = entry_premium + slippage
-            sl_premium = entry_premium * (1.0 - premium_sl_pct)
-            target_premium = entry_premium + (entry_premium * premium_sl_pct * reward_ratio)
-
-            # Intraday tracking
-            post_df = df[df.index.time >= time(10, 15)]
-            exit_time_str = "15:25"
-            exit_premium = entry_premium
-            exit_reason = "Time Exit (15:25)"
-            highest_prem = entry_premium
-            intraday_curve = []
-
-            for t_idx, row in post_df.iterrows():
-                spot_c = row["close"]
-                spot_l = row["low"]
-                spot_h = row["high"]
-
-                # Put premium moves inversely with spot
-                diff = spot_entry - spot_c
-                cur_prem = max(2.0, entry_premium + (diff * 0.50))
-                diff_l = spot_entry - spot_l
-                diff_h = spot_entry - spot_h
-                prem_high = max(2.0, entry_premium + (diff_l * 0.50))
-                prem_low = max(2.0, entry_premium + (diff_h * 0.50))
-
-                highest_prem = max(highest_prem, prem_high)
-                trailing_sl = max(sl_premium, highest_prem * 0.85)
-
-                cur_pnl = (cur_prem - entry_with_slip) * qty
-                intraday_curve.append({"time": t_idx.strftime("%H:%M"), "pnl": round(cur_pnl, 2)})
-
-                if prem_low <= trailing_sl:
-                    exit_time_str = t_idx.strftime("%H:%M")
-                    exit_premium = trailing_sl - slippage
-                    exit_reason = "Trailing SL Hit" if trailing_sl > sl_premium else "SL Hit (-30%)"
+            by_spot = "sl_spot" in setup
+            by_pts = "sl_pts" in setup
+            sl = None if by_spot else entry - setup["sl_pts"] if by_pts else entry * (1 - setup["sl_pct"])
+            target = None if by_spot else entry + setup["tgt_pts"] if by_pts else entry * (1 + setup["tgt_pct"])
+            trail = setup.get("trail")
+            highest = entry
+            exit_px, exit_reason, exit_time, exit_spot = None, f"Time Exit ({exit_at:%H:%M})", None, None
+            curve = []
+            for t, bar in c[c.index >= entry_time].iterrows():
+                if by_spot:
+                    if t in df.index and t > entry_time:
+                        s = df.loc[t]
+                        up = opt == "CE"
+                        hit_sl = s["low"] <= setup["sl_spot"] if up else s["high"] >= setup["sl_spot"]
+                        hit_tgt = s["high"] >= setup["tgt_spot"] if up else s["low"] <= setup["tgt_spot"]
+                        if hit_sl or hit_tgt:   # both in one candle → assume the stop came first
+                            # The option's price at the moment NIFTY touched the level isn't in a 5-min
+                            # candle; the candle's close is used (real, but it can be past the level).
+                            exit_px = float(bar["close"])
+                            exit_reason = "SL Hit (other end of first candle)" if hit_sl else "Target Hit (1:2 R:R)"
+                            exit_spot = setup["sl_spot"] if hit_sl else setup["tgt_spot"]
+                else:
+                    stop = max(sl, highest * (1 - trail)) if trail else sl
+                    if bar["low"] <= stop:
+                        exit_px = min(float(bar["open"]), stop) if t > entry_time else stop
+                        exit_reason = ("Trailing SL Hit" if stop > sl else
+                                       f"SL Hit (-{setup['sl_pts']:g} pts)" if by_pts else f"SL Hit (-{setup['sl_pct']:.0%})")
+                    elif bar["high"] >= target:
+                        exit_px = max(float(bar["open"]), target) if t > entry_time else target
+                        exit_reason = f"Target Hit (+{setup['tgt_pts']:g} pts)" if by_pts else f"Target Hit (+{setup['tgt_pct']:.0%})"
+                    highest = max(highest, float(bar["high"]))
+                if exit_px is None and t.time() >= exit_at:
+                    exit_px = float(bar["open"])
+                if exit_px is not None:
+                    exit_time = t
+                    curve.append({"time": t.strftime("%H:%M"), "pnl": round((exit_px - slippage - entry_with_slip) * qty, 2)})
                     break
-                if prem_high >= target_premium:
-                    exit_time_str = t_idx.strftime("%H:%M")
-                    exit_premium = target_premium - slippage
-                    exit_reason = "Target Hit (1:2 R:R)"
-                    break
-                if t_idx.time() >= time(15, 20):
-                    exit_time_str = t_idx.strftime("%H:%M")
-                    exit_premium = cur_prem - slippage
-                    exit_reason = "Time Exit (15:25)"
-                    break
+                curve.append({"time": t.strftime("%H:%M"), "pnl": round((float(bar["close"]) - entry_with_slip) * qty, 2)})
+            if exit_px is None:
+                exit_px, exit_time, exit_reason = float(c["close"].iloc[-1]), c.index[-1], "Last candle of the day"
 
-            gross_pnl = (exit_premium - entry_with_slip) * qty
-            charges = calculate_nse_charges(entry_with_slip, exit_premium, qty, is_option=True)
+            exit_with_slip = max(0.05, exit_px - slippage)
+            gross_pnl = (exit_with_slip - entry_with_slip) * qty
+            charges = calculate_nse_charges(entry_with_slip, exit_with_slip, qty, is_option=True)
             net_pnl = round(gross_pnl - charges, 2)
             cum_pnl = round(cum_pnl + net_pnl, 2)
-
-            pos_detail = [{
-                "leg": f"{atm_strike} PE",
-                "branch": "Branch 1 (ATM Put)",
-                "side": "BUY",
-                "qty": qty,
-                "entry_price": round(entry_with_slip, 2),
-                "exit_price": round(exit_premium, 2),
-                "exit_reason": exit_reason,
-                "pnl": net_pnl,
-            }]
-
-            evs = [
-                {"timestamp": entry_time_str, "type": "ENTRY", "detail": f"Bought {lots} lot ({qty} Qty) {atm_strike} PE @ ₹{entry_with_slip:.2f}"},
-                {"timestamp": exit_time_str, "type": "EXIT", "detail": f"Exited {atm_strike} PE @ ₹{exit_premium:.2f} ({exit_reason})"},
-            ]
-
+            is_ce = opt == "CE"
+            et, xt = entry_time.strftime("%H:%M"), exit_time.strftime("%H:%M")
+            levels = (f"SL NIFTY {setup['sl_spot']:,.2f} | Target NIFTY {setup['tgt_spot']:,.2f}" if by_spot
+                      else f"SL ₹{sl:.2f}{f' (trails {trail:.0%})' if trail else ''} | Target ₹{target:.2f}")
             trade_logs.append({
-                "date": day_date.strftime("%Y-%m-%d"),
-                "day_name": day_name,
-                "entry_time": entry_time_str,
-                "spot_at_entry": round(spot_entry, 1),
-                "ce_strike": "-",
-                "ce_entry": 0.0,
-                "ce_exit": 0.0,
-                "ce_sl_hit": False,
-                "pe_strike": atm_strike,
-                "pe_entry": round(entry_with_slip, 2),
-                "pe_exit": round(exit_premium, 2),
-                "pe_sl_hit": "SL" in exit_reason,
-                "reentry_count": 0,
-                "reentry_pnl": 0.0,
-                "exit_reason": exit_reason,
-                "gross_pnl": round(gross_pnl, 2),
-                "charges": round(charges, 2),
-                "net_pnl": net_pnl,
-                "cum_pnl": cum_pnl,
+                "date": day_date.strftime("%Y-%m-%d"), "day_name": day_date.strftime("%A"),
+                "entry_time": et, "spot_at_entry": round(spot_entry, 1),
+                "ce_strike": strike if is_ce else "-", "ce_entry": round(entry_with_slip, 2) if is_ce else 0.0,
+                "ce_exit": round(exit_with_slip, 2) if is_ce else 0.0, "ce_sl_hit": is_ce and "SL" in exit_reason,
+                "pe_strike": strike if not is_ce else "-", "pe_entry": round(entry_with_slip, 2) if not is_ce else 0.0,
+                "pe_exit": round(exit_with_slip, 2) if not is_ce else 0.0, "pe_sl_hit": (not is_ce) and "SL" in exit_reason,
+                "reentry_count": 0, "reentry_pnl": 0.0, "exit_reason": exit_reason,
+                "gross_pnl": round(gross_pnl, 2), "charges": round(charges, 2), "net_pnl": net_pnl, "cum_pnl": cum_pnl,
                 "side": "BUY",
-                "positions_detail": pos_detail,
-                "events": evs,
-                "intraday_curve": intraday_curve,
+                "positions_detail": [{"leg": f"{strike} {opt}", "type": opt, "branch": setup["branch"], "side": "BUY", "qty": qty,
+                                      "entry_time": et, "exit_time": xt,
+                                      "entry_price": round(entry_with_slip, 2), "exit_price": round(exit_with_slip, 2),
+                                      "exit_reason": exit_reason, "pnl": net_pnl}],
+                "events": setup.get("events", []) + [
+                    {"timestamp": et, "type": "ENTRY", "detail": f"{setup['why']}. Bought {lots} lot ({qty} Qty) {strike} {opt} @ ₹{entry_with_slip:.2f} (Dhan price) | {levels}"},
+                    {"timestamp": xt, "type": "EXIT", "detail": f"Exited {strike} {opt} @ ₹{exit_with_slip:.2f}"
+                                                              f"{f' (NIFTY {exit_spot:,.2f})' if exit_spot else ''} ({exit_reason})"},
+                ],
+                "intraday_curve": curve,
             })
+            equity_curve.append({"date": day_date.strftime("%Y-%m-%d"), "cum_pnl": cum_pnl, "net_pnl": net_pnl})
 
-            equity_curve.append({
-                "date": day_date.strftime("%Y-%m-%d"),
-                "cum_pnl": cum_pnl,
-                "net_pnl": net_pnl,
-            })
+        out = self._format_results(trade_logs, equity_curve, capital)
+        out["skipped_days"] = skipped
+        return out
 
-        return self._format_results(trade_logs, equity_curve, capital)
+    @staticmethod
+    def _at(day_date: date, hh: int, mm: int) -> datetime:
+        return datetime.combine(day_date, time(hh, mm))
 
-    def _run_gap_drive(self, hist_data: Dict[date, pd.DataFrame]) -> Dict[str, Any]:
-        capital = float(self.params.get("capital") or 30000.0)
-        raw_lot_size = self.params.get("lot_size")
-        lot_size = int(raw_lot_size) if raw_lot_size not in (None, "", 0) else 65
-        raw_lots = self.params.get("initial_lots")
-        lots = int(raw_lots) if raw_lots not in (None, "", "auto", 0) else 1
-        qty = lots * lot_size
-        raw_slip = self.params.get("slippage")
-        slippage = float(raw_slip) if raw_slip not in (None, "") else 1.5
+    def _run_10_12_put(self, hist_data):
+        """First 5-min candle breakout, any candle up to 2:30 PM. High broken → buy ATM CE, low broken →
+        buy ATM PE. Stop-loss 15 points / target 15 points on the option premium; exit 15:15."""
+        return self._run_buyer(hist_data, self._first_candle_decide(time(14, 30), points=(15.0, 15.0)), "First Candle Breakout")
 
-        trade_logs = []
-        equity_curve = []
-        cum_pnl = 0.0
-        sorted_dates = sorted(hist_data.keys())
+    def _run_gap_drive(self, hist_data):
+        """Gap of at least ±20 pts at the open → buy ATM CE (up) / PE (down) at 9:45.
+        25% SL, +50% target, exit 15:15."""
+        def decide(d, df, prev):
+            if prev is None:
+                return None
+            gap = float(df["open"].iloc[0]) - prev
+            if abs(gap) < 20:
+                return None
+            return {"opt": "CE" if gap > 0 else "PE", "entry_at": self._at(d, 9, 45), "exit_at": time(15, 15),
+                    "why": f"Gap {gap:+.0f} pts", "branch": f"Gap Drive ({gap:+.0f} pts)",
+                    "sl_pct": 0.25, "tgt_pct": 0.50, "trail": None}
+        return self._run_buyer(hist_data, decide, "Gap Drive")
 
-        for idx, day_date in enumerate(sorted_dates):
-            if idx == 0:
-                continue
-            prev_day = sorted_dates[idx - 1]
-            prev_close = hist_data[prev_day]["close"].iloc[-1]
-            df = hist_data[day_date]
-            if len(df) < 25:
-                continue
+    def _run_1pm_drop(self, hist_data):
+        """2+ red candles 12:45–1:15 PM → buy ATM PE when the 1:15 candle closes (1:20 open).
+        30% SL trailing 15%, +60% target, exit 15:15."""
+        def decide(d, df, _prev):
+            win = df[(df.index.time >= time(12, 45)) & (df.index.time <= time(13, 15))]
+            if len(win) < 4:
+                return None
+            red = int((win["close"] < win["open"]).sum())
+            if red < 2:
+                return None
+            return {"opt": "PE", "entry_at": self._at(d, 13, 20), "exit_at": time(15, 15),
+                    "why": f"{red} of {len(win)} candles red 12:45–1:15 PM", "branch": "1 PM Drop (ATM Put)",
+                    "sl_pct": 0.30, "tgt_pct": 0.60, "trail": 0.15}
+        return self._run_buyer(hist_data, decide, "1 PM Drop")
 
-            open_spot = df["open"].iloc[0]
-            gap_pts = open_spot - prev_close
+    def _run_orb_945(self, hist_data):
+        """Same breakout, but only if the first candle is broken before 9:45."""
+        return self._run_buyer(hist_data, self._first_candle_decide(time(9, 45)), "First Candle Breakout 9:45")
 
-            # Needs at least 20 pts gap to qualify
-            if abs(gap_pts) < 20:
-                continue
-
-            opt_type = "CE" if gap_pts > 0 else "PE"
-            day_name = day_date.strftime("%A")
-
-            # Entry at 09:45 AM
-            sub_945 = df[df.index.time >= time(9, 45)]
-            if sub_945.empty:
-                continue
-            entry_row = sub_945.iloc[0]
-            spot_entry = entry_row["open"]
-            atm_strike = get_atm_strike(spot_entry)
-
-            entry_prem = max(50.0, bs_call_price(spot_entry, atm_strike, 0.008, 0.065, 0.14) if opt_type == "CE" else bs_put_price(spot_entry, atm_strike, 0.008, 0.065, 0.14))
-            entry_with_slip = entry_prem + slippage
-            sl_prem = entry_prem * 0.75  # 25% SL
-            target_prem = entry_prem * 1.50  # 50% target
-
-            post_df = df[df.index.time >= time(9, 50)]
-            exit_time_str = "15:15"
-            exit_prem = entry_prem
-            exit_reason = "EOD Exit (15:15)"
-            intraday_curve = []
-
-            for t_idx, row in post_df.iterrows():
-                spot_c = row["close"]
-                diff = (spot_c - spot_entry) if opt_type == "CE" else (spot_entry - spot_c)
-                cur_prem = max(2.0, entry_prem + (diff * 0.50))
-                cur_pnl = (cur_prem - entry_with_slip) * qty
-                intraday_curve.append({"time": t_idx.strftime("%H:%M"), "pnl": round(cur_pnl, 2)})
-
-                if cur_prem <= sl_prem:
-                    exit_time_str = t_idx.strftime("%H:%M")
-                    exit_prem = sl_prem - slippage
-                    exit_reason = "Range SL Hit (-25%)"
-                    break
-                if cur_prem >= target_prem:
-                    exit_time_str = t_idx.strftime("%H:%M")
-                    exit_prem = target_prem - slippage
-                    exit_reason = "Target Hit (+50%)"
-                    break
-                if t_idx.time() >= time(15, 15):
-                    exit_time_str = t_idx.strftime("%H:%M")
-                    exit_prem = cur_prem - slippage
-                    exit_reason = "EOD Exit (15:15)"
-                    break
-
-            gross_pnl = (exit_prem - entry_with_slip) * qty
-            charges = calculate_nse_charges(entry_with_slip, exit_prem, qty, is_option=True)
-            net_pnl = round(gross_pnl - charges, 2)
-            cum_pnl = round(cum_pnl + net_pnl, 2)
-
-            pos_detail = [{
-                "leg": f"{atm_strike} {opt_type}",
-                "branch": f"Gap Drive ({gap_pts:+.0f} pts)",
-                "side": "BUY",
-                "qty": qty,
-                "entry_price": round(entry_with_slip, 2),
-                "exit_price": round(exit_prem, 2),
-                "exit_reason": exit_reason,
-                "pnl": net_pnl,
-            }]
-
-            evs = [
-                {"timestamp": "09:45", "type": "ENTRY", "detail": f"Gap {gap_pts:+.0f} pts detected. Bought {qty} Qty {atm_strike} {opt_type} @ ₹{entry_with_slip:.2f}"},
-                {"timestamp": exit_time_str, "type": "EXIT", "detail": f"Exited {atm_strike} {opt_type} @ ₹{exit_prem:.2f} ({exit_reason})"},
-            ]
-
-            trade_logs.append({
-                "date": day_date.strftime("%Y-%m-%d"),
-                "day_name": day_name,
-                "entry_time": "09:45",
-                "spot_at_entry": round(spot_entry, 1),
-                "ce_strike": atm_strike if opt_type == "CE" else "-",
-                "ce_entry": round(entry_with_slip, 2) if opt_type == "CE" else 0.0,
-                "ce_exit": round(exit_prem, 2) if opt_type == "CE" else 0.0,
-                "ce_sl_hit": opt_type == "CE" and "SL" in exit_reason,
-                "pe_strike": atm_strike if opt_type == "PE" else "-",
-                "pe_entry": round(entry_with_slip, 2) if opt_type == "PE" else 0.0,
-                "pe_exit": round(exit_prem, 2) if opt_type == "PE" else 0.0,
-                "pe_sl_hit": opt_type == "PE" and "SL" in exit_reason,
-                "reentry_count": 0,
-                "reentry_pnl": 0.0,
-                "exit_reason": exit_reason,
-                "gross_pnl": round(gross_pnl, 2),
-                "charges": round(charges, 2),
-                "net_pnl": net_pnl,
-                "cum_pnl": cum_pnl,
-                "side": "BUY",
-                "positions_detail": pos_detail,
-                "events": evs,
-                "intraday_curve": intraday_curve,
-            })
-
-            equity_curve.append({
-                "date": day_date.strftime("%Y-%m-%d"),
-                "cum_pnl": cum_pnl,
-                "net_pnl": net_pnl,
-            })
-
-        return self._format_results(trade_logs, equity_curve, capital)
-
-    def _run_1pm_drop(self, hist_data: Dict[date, pd.DataFrame]) -> Dict[str, Any]:
-        capital = float(self.params.get("capital") or 30000.0)
-        raw_lot_size = self.params.get("lot_size")
-        lot_size = int(raw_lot_size) if raw_lot_size not in (None, "", 0) else 65
-        raw_lots = self.params.get("initial_lots")
-        lots = int(raw_lots) if raw_lots not in (None, "", "auto", 0) else 1
-        qty = lots * lot_size
-        raw_slip = self.params.get("slippage")
-        slippage = float(raw_slip) if raw_slip not in (None, "") else 1.5
-
-        trade_logs = []
-        equity_curve = []
-        cum_pnl = 0.0
-
-        for day_date in sorted(hist_data.keys()):
-            df = hist_data[day_date]
-            if len(df) < 50:
-                continue
-
-            day_name = day_date.strftime("%A")
-            # Look at 12:45 to 13:15
-            drop_win = df[(df.index.time >= time(12, 45)) & (df.index.time <= time(13, 15))]
-            if len(drop_win) < 4:
-                continue
-
-            # Check if 2 or more candles were red
-            red_count = sum(1 for _, r in drop_win.iterrows() if r["close"] < r["open"])
-            if red_count < 2:
-                continue
-
-            entry_row = drop_win.iloc[-1]
-            entry_time_str = entry_row.name.strftime("%H:%M")
-            spot_entry = entry_row["close"]
-            atm_strike = get_atm_strike(spot_entry)
-
-            entry_prem = max(45.0, bs_put_price(spot_entry, atm_strike, 0.008, 0.065, 0.14))
-            entry_with_slip = entry_prem + slippage
-            sl_prem = entry_prem * 0.70  # 30% SL
-            target_prem = entry_prem * 1.60  # 60% Target
-
-            post_df = df[df.index.time > entry_row.name.time()]
-            exit_time_str = "15:20"
-            exit_prem = entry_prem
-            exit_reason = "EOD Exit (15:20)"
-            highest_prem = entry_prem
-            intraday_curve = []
-
-            for t_idx, row in post_df.iterrows():
-                spot_c = row["close"]
-                diff = spot_entry - spot_c
-                cur_prem = max(2.0, entry_prem + (diff * 0.50))
-                highest_prem = max(highest_prem, cur_prem)
-                trailing_sl = max(sl_prem, highest_prem * 0.85)
-
-                cur_pnl = (cur_prem - entry_with_slip) * qty
-                intraday_curve.append({"time": t_idx.strftime("%H:%M"), "pnl": round(cur_pnl, 2)})
-
-                if cur_prem <= trailing_sl:
-                    exit_time_str = t_idx.strftime("%H:%M")
-                    exit_prem = trailing_sl - slippage
-                    exit_reason = "Trailing SL Hit" if trailing_sl > sl_prem else "SL Hit (-30%)"
-                    break
-                if cur_prem >= target_prem:
-                    exit_time_str = t_idx.strftime("%H:%M")
-                    exit_prem = target_prem - slippage
-                    exit_reason = "Target Hit (1:2 R:R)"
-                    break
-                if t_idx.time() >= time(15, 20):
-                    exit_time_str = t_idx.strftime("%H:%M")
-                    exit_prem = cur_prem - slippage
-                    exit_reason = "EOD Exit (15:20)"
-                    break
-
-            gross_pnl = (exit_prem - entry_with_slip) * qty
-            charges = calculate_nse_charges(entry_with_slip, exit_prem, qty, is_option=True)
-            net_pnl = round(gross_pnl - charges, 2)
-            cum_pnl = round(cum_pnl + net_pnl, 2)
-
-            pos_detail = [{
-                "leg": f"{atm_strike} PE",
-                "branch": "1 PM European Open Drop",
-                "side": "BUY",
-                "qty": qty,
-                "entry_price": round(entry_with_slip, 2),
-                "exit_price": round(exit_prem, 2),
-                "exit_reason": exit_reason,
-                "pnl": net_pnl,
-            }]
-
-            evs = [
-                {"timestamp": entry_time_str, "type": "ENTRY", "detail": f"1 PM drop breakdown. Bought {qty} Qty {atm_strike} PE @ ₹{entry_with_slip:.2f}"},
-                {"timestamp": exit_time_str, "type": "EXIT", "detail": f"Exited {atm_strike} PE @ ₹{exit_prem:.2f} ({exit_reason})"},
-            ]
-
-            trade_logs.append({
-                "date": day_date.strftime("%Y-%m-%d"),
-                "day_name": day_name,
-                "entry_time": entry_time_str,
-                "spot_at_entry": round(spot_entry, 1),
-                "ce_strike": "-",
-                "ce_entry": 0.0,
-                "ce_exit": 0.0,
-                "ce_sl_hit": False,
-                "pe_strike": atm_strike,
-                "pe_entry": round(entry_with_slip, 2),
-                "pe_exit": round(exit_prem, 2),
-                "pe_sl_hit": "SL" in exit_reason,
-                "reentry_count": 0,
-                "reentry_pnl": 0.0,
-                "exit_reason": exit_reason,
-                "gross_pnl": round(gross_pnl, 2),
-                "charges": round(charges, 2),
-                "net_pnl": net_pnl,
-                "cum_pnl": cum_pnl,
-                "side": "BUY",
-                "positions_detail": pos_detail,
-                "events": evs,
-                "intraday_curve": intraday_curve,
-            })
-
-            equity_curve.append({
-                "date": day_date.strftime("%Y-%m-%d"),
-                "cum_pnl": cum_pnl,
-                "net_pnl": net_pnl,
-            })
-
-        return self._format_results(trade_logs, equity_curve, capital)
+    def _first_candle_decide(self, last_break: time, points=None):
+        """First 5-min candle (9:15) sets the range. The first candle from 9:20 that breaks it (starting
+        before last_break) decides: high → buy ATM CE, low → buy ATM PE, entered when that candle closes.
+        SL = other end of the first candle, target = break level ± 2 × range (1:2), both on NIFTY spot;
+        exit 15:15. A candle breaking both sides follows its close."""
+        def decide(d, df, _prev):
+            first = df[df.index.time == time(9, 15)]
+            if first.empty:
+                return None
+            hi, lo = float(first["high"].iloc[0]), float(first["low"].iloc[0])
+            rng = hi - lo
+            if rng <= 0:
+                return None
+            for t, row in df[(df.index.time >= time(9, 20)) & (df.index.time < last_break)].iterrows():
+                up, down = row["high"] > hi, row["low"] < lo
+                side = ("CE" if row["close"] >= row["open"] else "PE") if (up and down) else "CE" if up else "PE" if down else None
+                if side:
+                    lvl = hi if side == "CE" else lo
+                    word = "high" if side == "CE" else "low"
+                    return {"opt": side, "entry_at": t + timedelta(minutes=5), "exit_at": time(15, 15),
+                            "why": f"First candle {word} {lvl:,.2f} broken at {t:%H:%M}",
+                            "branch": f"First candle {word} broken",
+                            **({"sl_pts": points[0], "tgt_pts": points[1], "trail": None} if points else {
+                                "sl_spot": lo if side == "CE" else hi,
+                                "tgt_spot": lvl + 2 * rng if side == "CE" else lvl - 2 * rng}),
+                            "events": [{"timestamp": "09:20", "type": "SIGNAL",
+                                        "detail": f"First candle: high {hi:,.2f} • low {lo:,.2f} (range {rng:.1f} pts)"}]}
+            return None
+        return decide
 
     def _run_gold_trend(self, hist_data: Dict[date, pd.DataFrame]) -> Dict[str, Any]:
         """Gold Mini futures: direction from the 9:00 open vs yesterday's close, entry at 10:00,

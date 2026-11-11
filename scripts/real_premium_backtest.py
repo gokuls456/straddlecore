@@ -18,8 +18,12 @@ formula. Quantity is 65 per lot throughout, so every day is comparable at today'
 Data: Dhan's /charts/rollingoption (Data API plan), which returns weekly-option candles by
 offset from ATM (ATM-10 … ATM+10) with the actual strike on every candle. All offsets are
 fetched once for the whole range and regrouped by strike, so each leg keeps its fixed strike
-for the day. NIFTY spot comes from Dhan's intraday index candles. Responses are cached in
-cache/dhan_hist/, so re-runs are fast and work offline. --expiry-code picks the weekly
+for the day. NIFTY spot comes from Dhan's intraday index candles. Rolling candles mix two strikes
+whenever NIFTY crosses an ATM boundary inside the candle; on those candles only the close is used
+(checked against live contracts: closes within ~₹2, no overstated highs), so a brief spike inside
+such a candle can be missed and a stop-loss may fire a candle late. Results lean slightly optimistic. Responses are cached in
+cache/dhan_hist/, so re-runs are fast and work offline. Dhan serves this data a day or two
+per request, so the first run of a long range takes a while (≈ 42 requests per 2 trading days). --expiry-code picks the weekly
 contract (Dhan: 1 = nearest expiry); the reported expiry is the calendar estimate.
 """
 
@@ -71,14 +75,31 @@ class DhanHistory:
                                   lambda s=strike, o=opt: self.client.rolling_option(s, o, start, end, interval=5,
                                                                                      expiry_code=expiry_code))
                 if not df.empty and "strike" in df:
-                    rows.append(df.assign(opt=opt))
+                    rows.append(df.assign(opt=opt, strike=df["strike"].round().astype(int)))
         if not rows:
             sys.exit(f"Dhan returned no option candles: {self.client.last_error or 'check the Data API plan'}")
         allrows = pd.concat(rows)
-        allrows["strike"] = allrows["strike"].round().astype(int)
+        # The strike label is the ATM+offset strike at the candle's CLOSE. If NIFTY crossed an ATM boundary
+        # inside the candle, its open/high/low mix two strikes, so only the close is trusted there.
+        # A candle is clean when NIFTY's 5-min high and low round to the same ATM strike.
+        sp = self._spot.reindex(allrows.index)
+        atm_hi, atm_lo = (sp["high"] / 50).round(), (sp["low"] / 50).round()
+        allrows["rolled"] = ~(atm_hi == atm_lo).to_numpy()
         allrows["day"] = allrows.index.date
-        self._opts = {k: g[["open", "high", "low", "close"]].sort_index().pipe(lambda x: x[~x.index.duplicated()])
-                      for k, g in allrows.groupby(["day", "strike", "opt"])}
+        self._opts = {k: self._clean(g) for k, g in allrows.groupby(["day", "strike", "opt"])}
+
+    @staticmethod
+    def _clean(g: pd.DataFrame) -> pd.DataFrame:
+        """One strike's candles for one day. Bars where ATM moved are rebuilt from the close:
+        open = this strike's previous close (or the close), high/low = the larger/smaller of the two."""
+        g = g.sort_values("rolled").pipe(lambda x: x[~x.index.duplicated(keep="first")]).sort_index().copy()
+        prev_close = g["close"].shift(1)
+        contiguous = pd.Series(g.index, index=g.index).diff() == BAR
+        r = g["rolled"]
+        g.loc[r, "open"] = prev_close.where(contiguous, g["close"])[r]
+        g.loc[r, "high"] = g.loc[r, ["open", "close"]].max(axis=1)
+        g.loc[r, "low"] = g.loc[r, ["open", "close"]].min(axis=1)
+        return g[["open", "high", "low", "close"]]
 
     def _fetch_spot(self) -> pd.DataFrame:
         from engine.dhan_client import NIFTY_ID

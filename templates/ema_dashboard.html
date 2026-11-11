@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EMA Dashboard</title>
+<style>
+/* Layout: controls on top, price and verdict, then chart beside the EMA table, then the other details. */
+:root{
+  --bg:#f2f6f7;--surface:#ffffff;--ink:#10201f;--ink2:#46595c;--muted:#6d7e81;--grid:#e3eaeb;--axis:#bccacc;--line:#d6e0e2;
+  --accent:#0f6a78;--accent-ink:#ffffff;--soft:#e2f0f2;--up:#0a8a43;--down:#c93434;--flat:#8a6d00;
+  --upbg:#e3f4ea;--downbg:#fbe7e7;--flatbg:#f7f0d9;
+  --s1:#2a78d6;--s2:#eb6834;--s3:#6250d6;--s4:#d55181;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e1416;--surface:#161c1f;--ink:#edf3f3;--ink2:#b7c6c8;--muted:#8fa0a3;--grid:#263033;--axis:#3a484b;--line:#2b373a;
+  --accent:#58bccb;--accent-ink:#0b1a1d;--soft:#1e3136;--up:#35c477;--down:#f07070;--flat:#e0bd4a;
+  --upbg:#163024;--downbg:#3a1d1d;--flatbg:#332c14;
+  --s1:#3987e5;--s2:#d95926;--s3:#9085e9;--s4:#d55181;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--font)}
+.wrap{max-width:1240px;margin:0 auto;padding:20px max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left));display:grid;gap:16px}
+h1{font-size:24px;margin:0}
+.bar{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{font:600 15px var(--font);border:0;background:transparent;color:var(--ink2);padding:8px 14px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.seg button:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.status{font-size:14px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.status.ok .dot{background:var(--up)}.status.err .dot{background:var(--down)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.top{display:flex;flex-wrap:wrap;gap:12px 32px;align-items:flex-end;justify-content:space-between}
+.name{font-weight:700;font-size:18px}.sym{color:var(--muted);font-size:14px}
+.price{font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.chg{font-weight:700;font-size:18px;margin-left:8px}
+.day{display:flex;flex-wrap:wrap;gap:6px 22px;font-variant-numeric:tabular-nums}
+.day div{display:grid}.day span{font-size:13px;color:var(--muted)}.day b{font-size:16px}
+.verdict{border-radius:8px;padding:12px 14px;font-weight:600;display:flex;gap:10px;align-items:center}
+.verdict.up{background:var(--upbg);color:var(--up)}.verdict.down{background:var(--downbg);color:var(--down)}.verdict.flat{background:var(--flatbg);color:var(--flat)}
+.verdict i{font-style:normal;font-size:20px}
+.main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;font:600 14px var(--font);border:1px solid var(--line);background:transparent;color:var(--ink2);border-radius:6px;padding:4px 10px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--soft);color:var(--ink);border-color:var(--accent)}
+.sw{width:14px;height:3px;border-radius:2px;display:inline-block;flex:none}
+#plot{position:relative;touch-action:pan-y}
+#plot svg{display:block;width:100%}
+svg text{font:12px var(--font);fill:var(--muted);font-variant-numeric:tabular-nums}
+svg text.lab{fill:var(--ink);font-weight:700;paint-order:stroke;stroke:var(--surface);stroke-width:3px}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--axis);border-radius:6px;padding:7px 10px;font-size:13.5px;line-height:1.4;box-shadow:0 3px 12px rgba(0,0,0,.15);z-index:3;min-width:160px;font-variant-numeric:tabular-nums}
+.tip b{display:block}.tip div{display:flex;justify-content:space-between;gap:14px}.tip span:first-child{color:var(--ink2);display:inline-flex;align-items:center;gap:5px}
+.xh{position:absolute;width:1px;background:var(--muted);pointer-events:none}
+h2{font-size:17px;margin:0 0 10px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:13px;color:var(--muted);font-weight:600}
+td.r,th.r{text-align:right}
+.pill{font-size:13px;font-weight:700;padding:2px 8px;border-radius:999px}
+.pill.up{background:var(--upbg);color:var(--up)}.pill.down{background:var(--downbg);color:var(--down)}
+.small{font-size:13px;color:var(--muted)}
+.tblwrap{overflow-x:auto}
+.details{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.det{display:grid;gap:2px;align-content:start}
+.det span{font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+.det b{font-size:22px;font-variant-numeric:tabular-nums}
+.det p{margin:0;font-size:14px;color:var(--ink2)}
+.err{background:var(--downbg);color:var(--down);border-radius:8px;padding:12px 14px;font-weight:600}
+.foot{color:var(--muted);font-size:13px}
+.loading{opacity:.55;transition:opacity .2s}
+@media (max-width:1100px){.main{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <h1>EMA Dashboard</h1>
+    <div class="controls">
+      <div class="seg" id="inst" role="group" aria-label="Instrument">
+        {% for k, v in instruments.items() %}<button data-k="{{ k }}">{{ v }}</button>{% endfor %}
+      </div>
+      <div class="seg" id="tf" role="group" aria-label="Timeframe">
+        <button data-k="5">5 min</button><button data-k="15">15 min</button><button data-k="60">1 hour</button><button data-k="D">1 day</button>
+      </div>
+      <div class="status" id="status"><span class="dot"></span><span id="stxt">Loading…</span></div>
+    </div>
+  </div>
+
+  <div class="err" id="err" hidden></div>
+
+  <div id="content">
+    <div class="card" style="display:grid;gap:14px">
+      <div class="top">
+        <div><div class="name" id="name">–</div><div class="sym" id="sym"></div>
+          <div><span class="price" id="price">–</span><span class="chg" id="chg"></span></div></div>
+        <div class="day" id="day"></div>
+      </div>
+      <div class="verdict flat" id="verdict"><i>•</i><span>Loading…</span></div>
+    </div>
+
+    <div class="main" style="margin-top:16px">
+      <div class="card">
+        <div class="chips" id="chips"></div>
+        <div id="plot"><div id="svg"></div><div class="xh" id="xh" hidden></div><div class="tip" id="tip" hidden></div></div>
+        <p class="small" id="chartnote"></p>
+      </div>
+      <div class="card">
+        <h2>EMAs on this timeframe</h2>
+        <div class="tblwrap"><table id="emas"></table></div>
+        <p class="small" style="margin-top:10px">Distance = price − EMA. Direction compares the EMA now with 5 candles ago.</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>Other details</h2>
+      <div class="details" id="details"></div>
+    </div>
+  </div>
+
+  <p class="foot">Read-only. Data from Dhan, refreshed every 30 seconds while this page is open. Indicators describe past prices and cannot predict the next move. Not investment advice.</p>
+</div>
+
+<script>
+const COLORS={9:"--s1",20:"--s2",50:"--s3",200:"--s4"};
+const $=id=>document.getElementById(id);
+const css=k=>`var(${k})`;
+const nf=(v,d=2)=>v==null?"–":Number(v).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d});
+const sgn=(v,d=2)=>v==null?"–":(v>0?"+":v<0?"−":"")+nf(Math.abs(v),d);
+const load=(k,f)=>{try{return localStorage.getItem(k)||f}catch{return f}};
+const save=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
+let state={k:load("ema.inst","NIFTY"),tf:load("ema.tf","5")},data=null,on=new Set([9,20,50,200]),timer=null,reqId=0;
+
+function setSeg(id,val){document.querySelectorAll(`#${id} button`).forEach(b=>b.setAttribute("aria-pressed",b.dataset.k===val))}
+function tfLabel(tf){return {"5":"5-minute","15":"15-minute","60":"1-hour","D":"daily"}[tf]}
+
+async function refresh(){
+  const id=++reqId;$("content").classList.add("loading");
+  try{
+    const r=await fetch(`/api/ema?symbol=${state.k}&tf=${state.tf}`),j=await r.json();
+    if(id!==reqId)return;
+    if(!r.ok||j.error)throw new Error(j.error||`Request failed (${r.status})`);
+    data=j;$("err").hidden=true;render();
+    $("status").className="status ok";$("stxt").textContent=`Updated ${j.updated} IST`;
+  }catch(e){
+    if(id!==reqId)return;
+    $("err").hidden=false;$("err").textContent=e.message+(data?" Showing the last data received.":"");
+    $("status").className="status err";$("stxt").textContent="Not updated";
+  }finally{if(id===reqId)$("content").classList.remove("loading")}
+}
+function schedule(){clearInterval(timer);timer=setInterval(()=>{if(!document.hidden)refresh()},30000)}
+
+function render(){
+  const d=data,up=(d.change||0)>=0;
+  $("name").textContent=d.name;$("sym").textContent=d.key==="GOLDM"?`${d.symbol} · price per 10 g`:"";
+  $("price").textContent=nf(d.price);
+  $("chg").textContent=d.change==null?"":`${up?"▲":"▼"} ${sgn(d.change)} (${sgn(d.change_pct)}%)`;$("chg").style.color=css(up?"--up":"--down");
+  $("day").innerHTML=[["Open",d.day.open],["High",d.day.high],["Low",d.day.low],["Prev close",d.day.prev_close]].map(a=>`<div><span>${a[0]}</span><b>${nf(a[1])}</b></div>`).join("");
+  const v=$("verdict");v.className="verdict "+d.tone;v.innerHTML=`<i>${d.tone==="up"?"▲":d.tone==="down"?"▼":"◆"}</i><span></span>`;v.querySelector("span").textContent=`${tfLabel(d.timeframe)[0].toUpperCase()+tfLabel(d.timeframe).slice(1)} chart: ${d.verdict}`;
+  $("emas").innerHTML=`<tr><th>EMA</th><th class="r">Value</th><th class="r">Distance</th><th>Direction</th><th>Price is</th></tr>`+d.emas.map(e=>{
+    const flat=Math.abs(e.slope)<d.price*0.0002,dir=flat?"→ Flat":e.slope>0?"↗ Rising":"↘ Falling";
+    return `<tr><td><i class="sw" style="background:${css(COLORS[e.length])}"></i> <b>EMA ${e.length}</b>${e.settled?"":' <span class="small" title="Not enough history yet for a fully accurate value">*</span>'}</td><td class="r">${nf(e.value)}</td><td class="r">${sgn(e.distance)}<br><span class="small">${sgn(e.pct)}%</span></td><td>${dir}</td><td><span class="pill ${e.above?"up":"down"}">${e.above?"Above":"Below"}</span></td></tr>`}).join("");
+  const x=d.details,cards=[];
+  const rsiTxt=x.rsi>=70?"Overbought (stretched up)":x.rsi<=30?"Oversold (stretched down)":"Normal range (30 to 70)";
+  cards.push(["RSI 14",nf(x.rsi,1),rsiTxt]);
+  cards.push(["ATR 14",nf(x.atr,1),`Typical move in one ${tfLabel(d.timeframe)} candle`]);
+  if(x.vwap!=null){const dv=(x.fut_price??d.price)-x.vwap;cards.push(["Today's VWAP",nf(x.vwap),`${d.key==="GOLDM"?"Price":"Futures"} is ${sgn(dv)} ${dv>=0?"above":"below"} it. ${dv>=0?"Buyers":"Sellers"} have the edge today.`])}
+  if(d.key!=="GOLDM"&&x.fut_price!=null)cards.push(["Futures price",nf(x.fut_price),`${x.fut_symbol}, ${sgn(x.fut_price-d.price)} vs the index`]);
+  if(x.oi_change_pct!=null){const pu=(d.change||0)>=0,ou=x.oi_change_pct>=0;cards.push(["Futures OI today",`${sgn(x.oi_change_pct)}%`,pu&&ou?"Price up, OI up: long buildup":pu?"Price up, OI down: short covering":ou?"Price down, OI up: short buildup":"Price down, OI down: long unwinding"])}
+  const cr=(c,a,b)=>c?`EMA ${a} crossed ${c.direction} EMA ${b} ${c.bars_ago===0?"on this candle":c.bars_ago+" candle"+(c.bars_ago===1?"":"s")+" ago"}`:`No cross of EMA ${a} and ${b} in the loaded history`;
+  cards.push(["EMA 9 vs 20",x.cross_9_20?(x.cross_9_20.direction==="above"?"9 above 20":"9 below 20"):"–",cr(x.cross_9_20,9,20)]);
+  cards.push(["EMA 50 vs 200",x.cross_50_200?(x.cross_50_200.direction==="above"?"50 above 200":"50 below 200"):"–",cr(x.cross_50_200,50,200)]);
+  $("details").innerHTML=cards.map(c=>`<div class="det"><span>${c[0]}</span><b>${c[1]}</b><p>${c[2]}</p></div>`).join("");
+  $("chips").innerHTML=[9,20,50,200].map(n=>`<button class="chip" data-n="${n}" aria-pressed="${on.has(n)}"><i class="sw" style="background:${css(COLORS[n])}"></i>EMA ${n}</button>`).join("");
+  $("chartnote").textContent=`Last ${d.chart.t.length} ${tfLabel(d.timeframe)} candles. Hover or touch the chart to read values.`;
+  draw();
+}
+
+let G=null;
+function ticks(a,b,c){const raw=(b-a)/c,m=Math.pow(10,Math.floor(Math.log10(raw))),st=[1,2,2.5,5,10].map(x=>x*m).find(x=>x>=raw);const o=[];for(let v=Math.ceil(a/st)*st;v<=b;v+=st)o.push(v);return o}
+function declutter(a,min,top,bot){a.sort((p,q)=>p.y-q.y);a.forEach((t,k)=>{t.ly=k?Math.max(t.y,a[k-1].ly+min):Math.max(t.y,top)});const over=a.length?a[a.length-1].ly-bot:0;if(over>0)for(let k=a.length-1;k>=0;k--){a[k].ly-=over;if(k&&a[k].ly-a[k-1].ly>=min)break}return a}
+function tlabel(t,daily){const d=new Date(t);return daily?d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}):d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}
+function draw(){
+  if(!data)return;const c=data.chart,n=c.t.length,daily=data.timeframe==="D",el=$("svg");
+  const W=Math.max(280,el.clientWidth||$("plot").clientWidth),H=W<560?300:400,L=W<560?58:70,R=W<560?62:74,T=8,B=24,pw=W-L-R,ph=H-T-B;
+  let lo=Math.min(...c.l),hi=Math.max(...c.h);on.forEach(k=>c.ema[k].forEach(v=>{if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v)}}));
+  const pad=(hi-lo)*.04||1;lo-=pad;hi+=pad;
+  const step=pw/n,x=i=>L+step*(i+.5),y=v=>T+(hi-v)/(hi-lo)*ph,bw=Math.max(1.4,Math.min(step*.62,11));
+  const dec=hi>5000?0:2;
+  let s=`<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${data.name} candles with EMA lines">`;
+  ticks(lo,hi,W<560?5:6).forEach(v=>{s+=`<line x1="${L}" x2="${L+pw}" y1="${y(v)}" y2="${y(v)}" stroke="${css("--grid")}"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${nf(v,dec)}</text>`});
+  s+=`<line x1="${L}" x2="${L+pw}" y1="${T+ph}" y2="${T+ph}" stroke="${css("--axis")}"/>`;
+  const every=Math.ceil(n/(W<560?4:7));c.t.forEach((t,i)=>{if((n-1-i)%every===0)s+=`<text x="${x(i)}" y="${H-6}" text-anchor="middle">${tlabel(t,daily)}</text>`});
+  if(!daily)c.t.forEach((t,i)=>{if(i&&t.slice(0,10)!==c.t[i-1].slice(0,10)){const xd=L+step*i;s+=`<line x1="${xd}" x2="${xd}" y1="${T}" y2="${T+ph}" stroke="${css("--axis")}" stroke-dasharray="3 4"/><text x="${xd+4}" y="${T+12}">${new Date(t).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</text>`}});
+  for(let i=0;i<n;i++){const upc=c.c[i]>=c.o[i],col=css(upc?"--up":"--down"),top=y(Math.max(c.o[i],c.c[i])),h=Math.max(1.2,Math.abs(y(c.o[i])-y(c.c[i])));
+    s+=`<line x1="${x(i)}" x2="${x(i)}" y1="${y(c.h[i])}" y2="${y(c.l[i])}" stroke="${col}"/><rect x="${x(i)-bw/2}" y="${top}" width="${bw}" height="${h}" rx="1" fill="${col}"/>`}
+  const labs=[];
+  [9,20,50,200].forEach(k=>{if(!on.has(k))return;const pts=c.ema[k].map((v,i)=>v==null?null:`${x(i).toFixed(1)},${y(v).toFixed(1)}`).filter(Boolean).join(" ");
+    s+=`<polyline points="${pts}" fill="none" stroke="${css(COLORS[k])}" stroke-width="2" stroke-linejoin="round"/>`;labs.push({y:y(c.ema[k][n-1]),t:"EMA "+k})});
+  labs.push({y:y(c.c[n-1]),t:nf(c.c[n-1],dec)});
+  declutter(labs,15,T+6,T+ph-2).forEach(a=>{s+=`<text class="lab" x="${L+pw+6}" y="${a.ly+4}">${a.t}</text>`});
+  s+=`</svg>`;el.innerHTML=s;G={L,step,x,T,ph,n,daily};$("xh").style.top=T+"px";$("xh").style.height=ph+"px";
+}
+function hover(ev){
+  if(!G||!data)return;const b=$("plot").getBoundingClientRect(),i=Math.floor((ev.clientX-b.left-G.L)/G.step);if(i<0||i>=G.n)return leave();
+  const c=data.chart,xp=G.x(i),t=$("tip"),d=new Date(c.t[i]);$("xh").hidden=false;$("xh").style.left=xp+"px";
+  const when=G.daily?d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):d.toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+  t.innerHTML=`<b>${when}</b>`+[["Open",c.o[i]],["High",c.h[i]],["Low",c.l[i]],["Close",c.c[i]]].map(a=>`<div><span>${a[0]}</span><span>${nf(a[1])}</span></div>`).join("")+[9,20,50,200].filter(k=>on.has(k)).map(k=>`<div><span><i class="sw" style="background:${css(COLORS[k])}"></i>EMA ${k}</span><span>${nf(c.ema[k][i])}</span></div>`).join("");
+  t.hidden=false;const tw=t.offsetWidth;t.style.left=(xp+14+tw>b.width?Math.max(0,xp-14-tw):xp+14)+"px";t.style.top="10px";
+}
+function leave(){$("tip").hidden=true;$("xh").hidden=true}
+
+$("inst").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;state.k=b.dataset.k;save("ema.inst",state.k);setSeg("inst",state.k);refresh()});
+$("tf").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;state.tf=b.dataset.k;save("ema.tf",state.tf);setSeg("tf",state.tf);refresh()});
+$("chips").addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;const n=+b.dataset.n;on.has(n)?on.delete(n):on.add(n);b.setAttribute("aria-pressed",on.has(n));draw()});
+$("plot").addEventListener("pointermove",hover);$("plot").addEventListener("pointerdown",hover);$("plot").addEventListener("pointerleave",leave);
+let rz;new ResizeObserver(()=>{clearTimeout(rz);rz=setTimeout(draw,80)}).observe($("plot"));
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
+setSeg("inst",state.k);setSeg("tf",state.tf);refresh();schedule();
+</script>
+</body>
+</html>

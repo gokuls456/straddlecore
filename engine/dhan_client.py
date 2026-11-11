@@ -53,7 +53,8 @@ RATE_GAP = {"quote": 1.05, "data": 0.25, "chain": 3.05, "other": 0.06}
 TOKEN_MAX_AGE = 23 * 3600
 RETRY_LOGIN_AFTER = 300
 INTRADAY_MAX_DAYS = 89     # Dhan serves at most 90 days of intraday candles per request
-ROLLING_MAX_DAYS = 30      # expired-options data: 30 days per request
+# Expired-options data: since 6 Nov 2026 Dhan serves 1 day per request (docs still say 30). In practice
+# toDate is inclusive and fromDate..fromDate+1 is accepted, so each request covers two weekdays.
 
 SUBSCRIBE_HINT = ("Dhan Data APIs are not active on this account. Subscribe at web.dhan.co → "
                   "Profile → Access DhanHQ APIs → Data APIs (₹499 + GST / month).")
@@ -267,7 +268,7 @@ class DhanClient:
     # ----- HTTP -----
 
     def request(self, method: str, path: str, body: Optional[Dict[str, Any]] = None, kind: str = "other",
-                timeout: int = 20, _retry: bool = True) -> Any:
+                timeout: int = 20, _retry: bool = True, _busy: int = 0) -> Any:
         _throttle(kind)
         try:
             resp = requests.request(method, f"{API_BASE}{path}", headers=self._headers(),
@@ -286,10 +287,14 @@ class DhanClient:
                 raise err
             return out
         err = _error_from(resp)
+        # DH-904 / HTTP 429: too many requests (e.g. a background download plus a backtest). Back off and retry.
+        if (err.code == "DH-904" or resp.status_code == 429) and _busy < 4:
+            time.sleep(2 * (_busy + 1))
+            return self.request(method, path, body, kind, timeout, _retry, _busy + 1)
         if (err.code in TOKEN_ERRORS or resp.status_code == 401) and self.can_auto_login and _retry:
             with self._lock:
                 self.token, self.token_at = "", 0.0   # expired: log in again once
-            return self.request(method, path, body, kind, timeout, _retry=False)
+            return self.request(method, path, body, kind, timeout, _retry=False, _busy=_busy)
         if err.code in TOKEN_ERRORS or resp.status_code == 401:
             err = DhanError(f"Dhan access token expired or invalid ({err.code or resp.status_code}). Paste a new token, "
                             "or add your Dhan PIN + TOTP secret for automatic daily login.", err.code, resp.status_code)
@@ -382,13 +387,17 @@ class DhanClient:
 
     def rolling_option(self, strike: str, opt: str, start: date, end: date, interval: int = 5,
                        expiry_flag: str = "WEEK", expiry_code: int = 1, underlying: int = NIFTY_ID) -> pd.DataFrame:
-        """Expired NIFTY option candles by ATM offset ("ATM", "ATM+3", "ATM-2"), 30 days per request.
-        Each row carries the actual strike it priced at that moment."""
+        """Expired NIFTY option candles by ATM offset ("ATM", "ATM+3", "ATM-2"), ATM-10 … ATM+10.
+        Each row carries the actual strike it priced at that moment. Fetched two weekdays per request."""
         frames = []
-        cur = start
         side = "ce" if opt.upper() == "CE" else "pe"
+        cur = start
         while cur <= end:
-            stop = min(end + timedelta(days=1), cur + timedelta(days=ROLLING_MAX_DAYS))
+            if cur.weekday() >= 5:
+                cur += timedelta(days=1)
+                continue
+            nxt = cur + timedelta(days=1)
+            stop = nxt if (nxt <= end and nxt.weekday() < 5) else cur
             raw = self.request("POST", "/charts/rollingoption", {
                 "exchangeSegment": "NSE_FNO", "interval": str(interval), "securityId": int(underlying),
                 "instrument": "OPTIDX", "expiryFlag": expiry_flag, "expiryCode": int(expiry_code),
@@ -398,8 +407,8 @@ class DhanClient:
             }, kind="data", timeout=40)
             df = candles_frame(((raw or {}).get("data") or {}).get(side) or {})
             if not df.empty:
-                frames.append(df)
-            cur = stop
+                frames.append(df[(df.index.date >= start) & (df.index.date <= end)])
+            cur = stop + timedelta(days=1)
         if not frames:
             return pd.DataFrame(columns=["open", "high", "low", "close", "strike", "spot"])
         out = pd.concat(frames).sort_index()

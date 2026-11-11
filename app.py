@@ -24,10 +24,12 @@ from engine.data_feed import NiftyDataFeed
 from engine.gold_feed import GoldMiniFeed
 from engine.straddle_engine import NiftyStraddleEngine
 from engine.strategy_registry import list_strategies, get_strategy, UnifiedStrategyRunner
+from engine.margin import capital_per_lot
 from engine.live_runner import algo_runner
 from engine.dhan_broker import DhanBroker
 from engine.dhan_client import dhan_credentials
 from engine import telegram_notifier as tg
+from engine import option_history
 from engine.signal_scanner import signal_scanner, ALL_STRATEGIES
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -413,6 +415,30 @@ def algo_test_cycle_endpoint():
     res = algo_runner.execute_instant_paper_cycle(strategy_mode=data.get("strategy_mode"))
     return jsonify(res)
 
+def required_capital(strategy_id, lots):
+    """Capital needed to place `lots` of a strategy: per-lot margin (sellers) or premium (buyers),
+    live from Dhan at today's prices (registry estimate if Dhan is unreachable)."""
+    per = capital_per_lot(strategy_id)
+    return round(per["per_lot"] * max(1, int(lots)), 2), per
+
+
+@app.route("/api/option_history/status", methods=["GET"])
+def api_option_history_status():
+    """Progress of the background download of real Dhan option candles."""
+    return jsonify({"success": True, "data": option_history.status()})
+
+
+@app.route("/api/capital_required", methods=["GET"])
+def capital_required_endpoint():
+    strategy_id = request.args.get("strategy", "hedged_selling")
+    try:
+        lots = max(1, int(request.args.get("lots", 1)))
+    except ValueError:
+        lots = 1
+    total, per = required_capital(strategy_id, lots)
+    return jsonify({"success": True, "lots": lots, "to_execute": total, **per})
+
+
 @app.route("/api/backtest", methods=["POST"])
 def run_backtest_api():
     global LATEST_BACKTEST_RESULTS
@@ -421,13 +447,14 @@ def run_backtest_api():
         
         period = params.get("period", "1 year")
         strategy_mode = params.get("strategy_mode", "short_straddle")
-        capital = float(params.get("capital", 30000.0))
         slippage = float(params.get("slippage", 0.0))
         exclude_last_30 = bool(params.get("exclude_last_30", False))
         execution_mode = params.get("execution_mode", "fyers_calibrated")
         
+        # The set is defined by its lots; the capital it needs is worked out from them (not entered).
         raw_initial_lots = params.get("initial_lots")
-        initial_lots = int(raw_initial_lots) if raw_initial_lots not in (None, "", "auto", 0) else (10 if strategy_mode == "short_straddle" else None)
+        initial_lots = max(1, int(raw_initial_lots)) if raw_initial_lots not in (None, "", "auto", 0) else 1
+        capital, per_lot_info = required_capital(strategy_mode, initial_lots)
         
         raw_reentry_lots = params.get("reentry_lots")
         reentry_lots = int(raw_reentry_lots) if raw_reentry_lots not in (None, "", "auto", 0) else 1
@@ -443,10 +470,7 @@ def run_backtest_api():
 
         # Fetch data
         if strategy_mode == "gold_trend_futures":
-            # The lots/lot-size config is shared with the NIFTY strategies; Gold Mini is sized
-            # from capital (≈₹1.5L margin per 100 g lot) so it never exceeds the account.
-            initial_lots = max(1, int(capital // get_strategy("gold_trend_futures")["capital_per_lot"]))
-            lot_size = 100
+            lot_size = 100  # grams per Gold Mini lot
             hist_data = gold_feed.get_historical_intraday_data(period=period)
         else:
             hist_data = data_feed.get_historical_intraday_data(
@@ -474,7 +498,24 @@ def run_backtest_api():
             execution_mode=execution_mode,
         )
 
+        # Real option prices only: start downloading any days of Dhan option candles not cached yet
+        # (in the background; days without them are left out of this run, never modelled).
+        if strategy_mode == "gold_trend_futures":
+            results_source = {"source": "Dhan MCX Gold Mini futures candles", "days_total": len(hist_data),
+                              "days_with_prices": len(hist_data), "missing": 0, "downloading": False}
+        else:
+            days = sorted(hist_data)
+            missing = [d for d in option_history.missing_days(days) if d < date.today()]
+            if missing:
+                option_history.start_download(days)
+            results_source = {"source": "Dhan NIFTY option candles (real prices)", "days_total": len(days),
+                              "days_with_prices": len(days) - len(missing), "missing": len(missing),
+                              "downloading": option_history.status()["running"]}
+
         results = runner.run(hist_data)
+        results_source["skipped"] = (results.get("skipped_days") or [])[:30]
+        results_source["skipped_count"] = len(results.get("skipped_days") or [])
+        results["real_data"] = results_source
         results["params"] = {
             "period": period,
             "strategy_mode": strategy_mode,
@@ -494,6 +535,17 @@ def run_backtest_api():
         
         results["roi_pct"] = round((results["total_net_pnl"] / capital) * 100.0, 2) if capital else 0.0
         results["capital"] = capital
+        # What this exact set needs: margin/premium to place it, plus a cushion for its worst drawdown.
+        drawdown = abs(float(results.get("max_drawdown") or 0))
+        results["capital_required"] = {
+            "per_lot": per_lot_info["per_lot"],
+            "source": per_lot_info["source"],
+            "live": per_lot_info["live"],
+            "lots": initial_lots,
+            "to_execute": capital,
+            "worst_drawdown": round(drawdown, 2),
+            "recommended": round(capital + drawdown, -3) if drawdown else capital,
+        }
 
         LATEST_BACKTEST_RESULTS = results
 
@@ -510,7 +562,7 @@ def get_day_detail(date_str):
     try:
         if not LATEST_BACKTEST_RESULTS or "trade_logs" not in LATEST_BACKTEST_RESULTS:
             hist_data = data_feed.get_historical_intraday_data(period="1 year", exclude_last_30=True)
-            engine = NiftyStraddleEngine()
+            engine = NiftyStraddleEngine(real_prices=True)
             LATEST_BACKTEST_RESULTS = engine.run_backtest(hist_data)
 
         day_log = next((t for t in LATEST_BACKTEST_RESULTS["trade_logs"] if t["date"] == date_str), None)
@@ -526,7 +578,7 @@ def export_csv():
     global LATEST_BACKTEST_RESULTS
     if not LATEST_BACKTEST_RESULTS or "trade_logs" not in LATEST_BACKTEST_RESULTS:
         hist_data = data_feed.get_historical_intraday_data(period="1 year", exclude_last_30=True)
-        engine = NiftyStraddleEngine()
+        engine = NiftyStraddleEngine(real_prices=True)
         LATEST_BACKTEST_RESULTS = engine.run_backtest(hist_data)
 
     output = io.StringIO()

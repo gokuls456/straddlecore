@@ -3,8 +3,7 @@ Market Data Feed Provider for NIFTY 50 Options Backtesting (data from Dhan only)
 Supports:
 - Real NIFTY 50 5-minute bars from Dhan's intraday charts API (last 5 years, needs the
   Dhan Data API plan), fetched in 90-day pieces
-- Days Dhan has a daily bar for but no 5-minute bars get a path synthesised to match
-  that day's real OHLC (rare: mostly special sessions)
+- Real data only: a day without Dhan 5-minute bars is left out (never synthesised)
 - Local disk caching for instant subsequent evaluations
 - Handling 'excluding last 30 days' toggle as seen in user's configuration
 """
@@ -64,7 +63,7 @@ class NiftyDataFeed:
                 end_date = today
                 start_date = end_date - timedelta(days=total_days)
 
-        cache_key = f"dhan_nifty_{start_date}_{end_date}.parquet"
+        cache_key = f"dhan_nifty_real_{start_date}_{end_date}.parquet"
         cache_path = os.path.join(self.cache_dir, cache_key)
         
         if os.path.exists(cache_path):
@@ -120,18 +119,8 @@ class NiftyDataFeed:
                     all_day_dfs.append(day_5m_filtered[['open', 'high', 'low', 'close']].astype(float))
                     continue
 
-            # No 5m bars from Dhan: synthesise a 5m path anchored to the day's real daily OHLC
-            d_row = daily_df.loc[daily_df.index.date == d] if not daily_df.empty else pd.DataFrame()
-            if not d_row.empty:
-                d_open = float(d_row['open'].iloc[0])
-                d_high = float(d_row['high'].iloc[0])
-                d_low = float(d_row['low'].iloc[0])
-                d_close = float(d_row['close'].iloc[0])
-            else:
-                continue  # no real data for this day: never invent one
-
-            synthetic_day = self._generate_realistic_intraday_day(d, d_open, d_high, d_low, d_close)
-            all_day_dfs.append(synthetic_day)
+            # No real 5-minute bars from Dhan for this day: leave it out (real data only).
+            logger.info("Skipping %s: Dhan has no 5-minute NIFTY bars for it", d)
 
         if all_day_dfs:
             combined_df = pd.concat(all_day_dfs).sort_index()

@@ -64,6 +64,7 @@ class StrategyPosition:
         self.exit_reason: str = ""
         self.pnl: float = 0.0
         self.current_price: float = entry_price
+        self.worst: float = entry_price   # worst price in the latest candle (real-candle stop-losses)
 
     def update_price(self, price: float):
         self.current_price = price
@@ -126,7 +127,8 @@ class NiftyStraddleEngine:
                  reentry_enabled: bool = True,
                  reentry_hedged: bool = False,
                  reentry_sl_pct: Optional[float] = None,
-                 max_reentries: Optional[int] = None):
+                 max_reentries: Optional[int] = None,
+                 real_prices: bool = False):
         self.strategy_mode = strategy_mode.lower()
         self.capital = float(capital)
         self.initial_lots = initial_lots
@@ -145,6 +147,11 @@ class NiftyStraddleEngine:
         self.reentry_hedged = reentry_hedged      # hedged_selling: buy wings with the re-entry too
         self.reentry_sl_pct = reentry_sl_pct      # stop-loss % on each re-entry leg; closes that re-entry set
         self.max_reentries = max_reentries        # cap re-entry sets per day (None = one per SL trigger)
+        # Real Dhan option candles (engine/option_history.py) instead of Black-Scholes. Days without
+        # real candles are skipped, stop-losses trigger on the real candle high/low and fill at the SL.
+        self.real_prices = real_prices
+        self.book = None
+        self.skipped_days: List[str] = []
         
         # P&L Guard: scale proportionally with capital if account is small (< 1 Lakh)
         if pl_target is not None and pl_target > 0 and (capital >= 100000 or pl_target <= capital * 0.25):
@@ -192,6 +199,13 @@ class NiftyStraddleEngine:
             diff_seconds = max(10, (expiry_dt - current_dt).total_seconds())
             return diff_seconds / (365.0 * 86400.0)
 
+    def price(self, spot: float, strike: int, opt: str, current_dt: datetime, iv: float, field: str = "close") -> float:
+        """One leg's price: the real Dhan candle when real_prices is on, else Black-Scholes."""
+        if self.real_prices:
+            return self.book.price(strike, opt, current_dt, field)
+        ce, pe = self.get_option_prices(spot, strike, current_dt, iv)
+        return ce if opt == "CE" else pe
+
     def get_option_prices(self, spot: float, strike: int, current_dt: datetime, iv: float) -> Tuple[float, float]:
         T = self.get_time_to_expiry(current_dt)
         ce = bs_call_price(spot, strike, T, self.r, iv)
@@ -228,11 +242,13 @@ class NiftyStraddleEngine:
             slip = price * (self.slippage_pct / 100.0)
             return (price + slip) if is_buy else max(0.05, price - slip)
 
-        def square_off_all(current_spot: float, current_dt: datetime, reason: str, branch_id: Optional[str] = None):
+        def square_off_all(current_spot: float, current_dt: datetime, reason: str, branch_id: Optional[str] = None,
+                           fills: Optional[Dict[int, float]] = None):
             for pos in positions:
                 if pos.is_open and (branch_id is None or pos.branch_id == branch_id):
-                    ce_p, pe_p = self.get_option_prices(current_spot, pos.strike, current_dt, iv)
-                    market_p = ce_p if pos.opt_type == 'CE' else pe_p
+                    market_p = (fills or {}).get(id(pos))
+                    if market_p is None:
+                        market_p = self.price(current_spot, pos.strike, pos.opt_type, current_dt, iv)
                     # Closing BUY position means selling to market (is_buy=False)
                     # Closing SELL position means buying back from market (is_buy=True)
                     exit_p = apply_slippage(market_p, is_buy=(pos.side == "SELL"))
@@ -272,7 +288,8 @@ class NiftyStraddleEngine:
             if not has_entered and cur_time >= self.entry_time_start:
                 has_entered = True
                 atm_strike = get_atm_strike(open_p)
-                ce_prem, pe_prem = self.get_option_prices(open_p, atm_strike, current_dt, iv)
+                ce_prem = self.price(open_p, atm_strike, "CE", current_dt, iv, "open")
+                pe_prem = self.price(open_p, atm_strike, "PE", current_dt, iv, "open")
 
                 if self.strategy_mode == "option_buying":
                     # Option Buying (Long Straddle): Buy ATM CE & Buy ATM PE
@@ -320,8 +337,8 @@ class NiftyStraddleEngine:
 
                     otm_ce_strike = atm_strike + self.hedge_distance_pts
                     otm_pe_strike = atm_strike - self.hedge_distance_pts
-                    otm_ce_p, _ = self.get_option_prices(open_p, otm_ce_strike, current_dt, iv)
-                    _, otm_pe_p = self.get_option_prices(open_p, otm_pe_strike, current_dt, iv)
+                    otm_ce_p = self.price(open_p, otm_ce_strike, "CE", current_dt, iv, "open")
+                    otm_pe_p = self.price(open_p, otm_pe_strike, "PE", current_dt, iv, "open")
                     otm_ce_entry = apply_slippage(otm_ce_p, is_buy=True)
                     otm_pe_entry = apply_slippage(otm_pe_p, is_buy=True)
 
@@ -370,8 +387,7 @@ class NiftyStraddleEngine:
                     opened_up = self.prev_close is None or day_open >= self.prev_close
                     wing_type = "CE" if opened_up else "PE"
                     wing_strike = atm_strike + self.hedge_distance_pts if opened_up else atm_strike - self.hedge_distance_pts
-                    w_ce_p, w_pe_p = self.get_option_prices(open_p, wing_strike, current_dt, iv)
-                    wing_entry = apply_slippage(w_ce_p if opened_up else w_pe_p, is_buy=True)
+                    wing_entry = apply_slippage(self.price(open_p, wing_strike, wing_type, current_dt, iv, "open"), is_buy=True)
                     wing_pos = StrategyPosition(
                         leg_id=f"{wing_type}_WING", symbol=f"NIFTY_{wing_strike}_{wing_type}", opt_type=wing_type,
                         strike=wing_strike, qty=qty_initial, entry_price=wing_entry,
@@ -439,7 +455,8 @@ class NiftyStraddleEngine:
                         if self.max_reentries is not None and reentries_done >= self.max_reentries:
                             continue
                         new_atm = get_atm_strike(open_p)
-                        ce_re_p, pe_re_p = self.get_option_prices(open_p, new_atm, current_dt, iv)
+                        ce_re_p = self.price(open_p, new_atm, "CE", current_dt, iv, "open")
+                        pe_re_p = self.price(open_p, new_atm, "PE", current_dt, iv, "open")
                         is_buy_mode = (self.strategy_mode == "option_buying")
                         ce_re_entry = apply_slippage(ce_re_p, is_buy=is_buy_mode)
                         pe_re_entry = apply_slippage(pe_re_p, is_buy=is_buy_mode)
@@ -453,8 +470,8 @@ class NiftyStraddleEngine:
                             ce_re_sl = pe_re_sl = None
                         if self.reentry_hedged and self.strategy_mode == "hedged_selling":
                             w_ce_strike, w_pe_strike = new_atm + self.hedge_distance_pts, new_atm - self.hedge_distance_pts
-                            w_ce_p, _ = self.get_option_prices(open_p, w_ce_strike, current_dt, iv)
-                            _, w_pe_p = self.get_option_prices(open_p, w_pe_strike, current_dt, iv)
+                            w_ce_p = self.price(open_p, w_ce_strike, "CE", current_dt, iv, "open")
+                            w_pe_p = self.price(open_p, w_pe_strike, "PE", current_dt, iv, "open")
                             positions.extend([
                                 StrategyPosition(leg_id=f"CE_REWING_{len(positions)}", symbol=f"NIFTY_{w_ce_strike}_CE", opt_type="CE",
                                                  strike=w_ce_strike, qty=re_qty, entry_price=apply_slippage(w_ce_p, is_buy=True),
@@ -500,27 +517,32 @@ class NiftyStraddleEngine:
 
                 for pos in positions:
                     if pos.is_open:
-                        c_p, p_p = self.get_option_prices(spot_step, pos.strike, current_dt, iv)
-                        pos.update_price(c_p if pos.opt_type == 'CE' else p_p)
+                        pos.update_price(self.price(spot_step, pos.strike, pos.opt_type, current_dt, iv))
+                        # Real candles: a stop-loss triggers on the candle's worst price for the leg.
+                        pos.worst = pos.current_price
+                        if self.real_prices:
+                            b = self.book.bar(pos.strike, pos.opt_type, current_dt)
+                            if b is not None:
+                                pos.worst = float(b["high"]) if pos.side == "SELL" else float(b["low"])
+
+                def sl_fill(pos) -> float:
+                    """Real candles: fill at the SL, or at the candle open if it gapped past it."""
+                    if not self.real_prices:
+                        return pos.current_price
+                    b = self.book.bar(pos.strike, pos.opt_type, current_dt)
+                    o = float(b["open"]) if b is not None else pos.sl_price
+                    return max(o, pos.sl_price) if pos.side == "SELL" else min(o, pos.sl_price)
 
                 ce_sl_triggered = False
                 pe_sl_triggered = False
 
-                if ce_initial_pos and ce_initial_pos.is_open and ce_initial_pos.sl_price:
-                    if ce_initial_pos.side == "BUY":
-                        if ce_initial_pos.current_price <= ce_initial_pos.sl_price:
-                            ce_sl_triggered = True
-                    else:
-                        if ce_initial_pos.current_price >= ce_initial_pos.sl_price:
-                            ce_sl_triggered = True
+                def sl_hit(pos) -> bool:
+                    if not (pos and pos.is_open and pos.sl_price):
+                        return False
+                    return pos.worst <= pos.sl_price if pos.side == "BUY" else pos.worst >= pos.sl_price
 
-                if pe_initial_pos and pe_initial_pos.is_open and pe_initial_pos.sl_price:
-                    if pe_initial_pos.side == "BUY":
-                        if pe_initial_pos.current_price <= pe_initial_pos.sl_price:
-                            pe_sl_triggered = True
-                    else:
-                        if pe_initial_pos.current_price >= pe_initial_pos.sl_price:
-                            pe_sl_triggered = True
+                ce_sl_triggered = sl_hit(ce_initial_pos)
+                pe_sl_triggered = sl_hit(pe_initial_pos)
 
                 if ce_sl_triggered or pe_sl_triggered:
                     if ce_sl_triggered:
@@ -528,7 +550,7 @@ class NiftyStraddleEngine:
                         result.events.append({
                             'timestamp': current_dt.strftime('%H:%M:%S'),
                             'type': 'SL_TRIGGERED',
-                            'detail': f"Branch 1 CE SL Hit: Premium ₹{ce_initial_pos.current_price:.2f} vs SL ₹{ce_initial_pos.sl_price:.2f}"
+                            'detail': f"Branch 1 CE SL Hit: Premium ₹{ce_initial_pos.worst:.2f} vs SL ₹{ce_initial_pos.sl_price:.2f}"
                         })
                         if self.reentry_enabled:
                             pending_reentries.append({
@@ -541,7 +563,7 @@ class NiftyStraddleEngine:
                         result.events.append({
                             'timestamp': current_dt.strftime('%H:%M:%S'),
                             'type': 'SL_TRIGGERED',
-                            'detail': f"Branch 2 PE SL Hit: Premium ₹{pe_initial_pos.current_price:.2f} vs SL ₹{pe_initial_pos.sl_price:.2f}"
+                            'detail': f"Branch 2 PE SL Hit: Premium ₹{pe_initial_pos.worst:.2f} vs SL ₹{pe_initial_pos.sl_price:.2f}"
                         })
                         if self.reentry_enabled:
                             pending_reentries.append({
@@ -550,21 +572,22 @@ class NiftyStraddleEngine:
                             })
 
                     square_off_reason = "Branch 1 & 2 SL Hit" if (ce_sl_triggered and pe_sl_triggered) else ("Branch 1 CE SL Hit" if ce_sl_triggered else "Branch 2 PE SL Hit")
-                    square_off_all(spot_step, current_dt, square_off_reason)
+                    fills = {id(p): sl_fill(p) for p, hit in ((ce_initial_pos, ce_sl_triggered), (pe_initial_pos, pe_sl_triggered)) if hit}
+                    square_off_all(spot_step, current_dt, square_off_reason, fills=fills)
 
                 # Re-entry legs with their own stop-loss: close only that re-entry set
                 if self.reentry_sl_pct:
                     for pos in positions:
                         if not (pos.is_open and pos.is_reentry and pos.sl_price):
                             continue
-                        hit = pos.current_price <= pos.sl_price if pos.side == "BUY" else pos.current_price >= pos.sl_price
-                        if hit:
+                        if sl_hit(pos):
                             result.events.append({
                                 'timestamp': current_dt.strftime('%H:%M:%S'),
                                 'type': 'SL_TRIGGERED',
-                                'detail': f"Re-entry {pos.opt_type} SL Hit: Premium ₹{pos.current_price:.2f} vs SL ₹{pos.sl_price:.2f}"
+                                'detail': f"Re-entry {pos.opt_type} SL Hit: Premium ₹{pos.worst:.2f} vs SL ₹{pos.sl_price:.2f}"
                             })
-                            square_off_all(spot_step, current_dt, "Re-entry SL Hit", branch_id=pos.branch_id)
+                            square_off_all(spot_step, current_dt, "Re-entry SL Hit", branch_id=pos.branch_id,
+                                           fills={id(pos): sl_fill(pos)})
 
                 # Branch 3: P&L guard
                 open_pos_count = sum(1 for p in positions if p.is_open)
@@ -651,7 +674,21 @@ class NiftyStraddleEngine:
             day_df = historical_data_by_day[d]
             if len(day_df) < 10:
                 continue
-            res = self.simulate_day(day_df)
+            if self.real_prices:
+                from engine.option_history import NoRealPrice, load_day
+                self.book = load_day(d, day_df)
+                if self.book is None:
+                    self.skipped_days.append(f"{d}: no Dhan option candles")
+                    self.prev_close = float(day_df.iloc[-1]['close'])
+                    continue
+                try:
+                    res = self.simulate_day(day_df)
+                except NoRealPrice as exc:
+                    self.skipped_days.append(str(exc))
+                    self.prev_close = float(day_df.iloc[-1]['close'])
+                    continue
+            else:
+                res = self.simulate_day(day_df)
             self.prev_close = float(day_df.iloc[-1]['close'])
             daily_results.append(res)
             cumulative_pnl += res.net_pnl
@@ -697,6 +734,8 @@ class NiftyStraddleEngine:
                         'branch': p.branch_id,
                         'entry_price': round(p.entry_price, 2),
                         'exit_price': round(p.exit_price or 0.0, 2),
+                        'entry_time': p.entry_time.strftime('%H:%M') if p.entry_time else '',
+                        'exit_time': p.exit_time.strftime('%H:%M') if getattr(p, 'exit_time', None) else '',
                         'pnl': round(p.pnl, 2),
                         'exit_reason': p.exit_reason
                     }

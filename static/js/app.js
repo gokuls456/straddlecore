@@ -23,6 +23,10 @@ let currentExecutionMode = 'fyers_calibrated';
 const liveOrderBroker = 'dhan';
 let dhanTokenSaved = false;
 let dhanAutoLogin = false;
+// Backtest: capital is not entered; the server works out what the chosen set needs (live from Dhan).
+let guardEdited = false;      // user typed their own P&L guard → stop auto-filling it
+let capitalPreviewTimer = null;
+let capitalPreviewSeq = 0;
 
 /**
  * Intelligent capital input parser.
@@ -55,6 +59,7 @@ function parseCapitalInput(val) {
 // DOM Ready initialization
 document.addEventListener('DOMContentLoaded', async () => {
     await loadStrategyMeta();
+    renderArchitecture();
     await loadAccountType();
     loadTelegramConfig();
     loadSignalStatus();
@@ -63,6 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkAlgoStatus();
     setInterval(checkAlgoStatus, 4000);
     setInterval(refreshBalance, 15000);
+    switchStudioTab('backtest');   // Live Execution Desk is disabled: open on the backtest studio
 });
 
 async function loadStrategyMeta() {
@@ -83,35 +89,23 @@ function formatShortINR(n) {
     return `₹${v}`;
 }
 
-// How many lots the given capital can fund for a strategy (0 = not enough).
-function lotsFor(mode, capital) {
-    const perLot = STRATEGY_META[mode]?.capital_per_lot || 30000;
-    return Math.floor(capital / perLot);
-}
-
-function strategyFitText(mode, capital) {
+// Strategy labels show what one lot needs (margin for sellers, premium for buyers).
+function perLotText(mode) {
     const perLot = STRATEGY_META[mode]?.capital_per_lot;
-    if (!perLot) return '';
-    const lots = lotsFor(mode, capital);
-    return lots >= 1
-        ? `${lots} lot${lots > 1 ? 's' : ''} with ${formatShortINR(capital)}`
-        : `needs ~${formatShortINR(perLot)}/lot`;
+    return perLot ? `~${formatShortINR(perLot)}/lot` : '';
 }
 
-// Strategy labels everywhere reflect the current capital instead of fixed "₹30k" text.
 function refreshStrategyLabels() {
-    const capital = currentAllocatedCapital;
     document.querySelectorAll('#bt-quick-strategy option').forEach((opt) => {
         if (!opt.dataset.base) opt.dataset.base = opt.textContent.trim();
-        const fits = lotsFor(opt.value, capital) >= 1;
-        opt.textContent = `${fits ? '' : '⚠ '}${opt.dataset.base} — ${strategyFitText(opt.value, capital)}`;
+        const t = perLotText(opt.value);
+        opt.textContent = t ? `${opt.dataset.base} — ${t}` : opt.dataset.base;
     });
     document.querySelectorAll('.strategy-pick').forEach((card) => {
         const tag = card.querySelector('.strat-tag');
         if (!tag) return;
-        const fits = lotsFor(card.dataset.mode, capital) >= 1;
-        tag.textContent = fits ? `Fits ${strategyFitText(card.dataset.mode, capital)}` : `⚠ Needs ~${formatShortINR(STRATEGY_META[card.dataset.mode]?.capital_per_lot)}/lot`;
-        tag.classList.toggle('tag-orange', !fits);
+        tag.textContent = `Needs ${perLotText(card.dataset.mode)}`;
+        tag.classList.remove('tag-orange');
     });
 }
 
@@ -144,9 +138,10 @@ function switchStudioTab(tab) {
 
 const STRATEGY_NAMES = {
     'hedged_selling': '⚡ Iron Butterfly',
-    'nifty_10_12_put': '📉 10:12 Bearish Put',
+    'nifty_10_12_put': '📈 First Candle Breakout (All Day)',
     'nifty_gap_drive': '🚀 Gap Drive Momentum',
     'nifty_1pm_drop': '💥 1 PM Volatility Drop',
+    'nifty_orb_945': '📐 First Candle Breakout',
     'option_buying': '🎯 Long Straddle',
     'short_straddle': '🏛️ Classic Straddle',
     'trend_hedged_straddle': '🧭 Trend-Hedged Straddle',
@@ -154,7 +149,7 @@ const STRATEGY_NAMES = {
 };
 
 // Backtest-only strategies: the demo algo can't trade them, so picking one must not change the live strategy.
-const BACKTEST_ONLY_STRATEGIES = ['gold_trend_futures'];
+const BACKTEST_ONLY_STRATEGIES = ['gold_trend_futures', 'nifty_orb_945'];
 
 function selectLiveStrategy(mode) {
     // Only one strategy runs at a time; it can't be changed while the algo is armed/running.
@@ -172,13 +167,13 @@ function selectLiveStrategy(mode) {
     if (quickSelect) quickSelect.value = mode;
 
     const names = STRATEGY_NAMES;
-    const fit = strategyFitText(mode, currentAllocatedCapital);
+    const fit = perLotText(mode);
     if (badge) badge.textContent = fit ? `${names[mode] || mode} • ${fit}` : (names[mode] || mode);
 
     const desc = document.getElementById('algo-status-desc');
     const modeLabel = currentAccountType === 'original' ? `ORIGINAL (${liveOrderBroker.toUpperCase()} LIVE)` : 'DEMO (PAPER)';
     if (desc && !isAlgoActive) {
-        desc.innerHTML = `Algo engine ready on <strong>${modeLabel}</strong> • Active strategy: <strong>${names[mode] || mode}</strong>. Auto-filled capital: <strong>${formatINR(currentAllocatedCapital)}</strong>. When the strategy trigger hits, it places the order.`;
+        desc.innerHTML = `Algo engine ready on <strong>${modeLabel}</strong> • Active strategy: <strong>${names[mode] || mode}</strong>. When the strategy trigger hits, it places the order.`;
     }
 }
 
@@ -262,149 +257,10 @@ async function switchAccount(value) {
     if (currentResults) runBacktest();
 }
 
-function onBalancePillClick() {
-    if (currentAccountType !== 'demo') {
-        refreshBalance();
-        return;
-    }
-    const input = document.getElementById('header-capital-input');
-    const val = document.getElementById('header-balance-val');
-    if (!input || !input.classList.contains('hidden')) return;
-    input.value = currentAllocatedCapital.toLocaleString('en-IN');
-    val?.classList.add('hidden');
-    document.getElementById('header-balance-edit')?.classList.add('hidden');
-    input.classList.remove('hidden');
-    input.focus();
-    input.select();
-}
-
-function onCapitalInputKey(event) {
-    if (event.key === 'Enter') event.target.blur();
-    if (event.key === 'Escape') {
-        event.target.dataset.cancel = '1';
-        event.target.blur();
-    }
-}
-
-// The header pill is the single place demo capital is edited.
-async function saveDemoCapital() {
-    const input = document.getElementById('header-capital-input');
-    if (!input || input.classList.contains('hidden')) return;
-    const cancelled = input.dataset.cancel === '1';
-    delete input.dataset.cancel;
-    const raw = input.value.trim();
-    input.classList.add('hidden');
-    document.getElementById('header-balance-val')?.classList.remove('hidden');
-    document.getElementById('header-balance-edit')?.classList.remove('hidden');
-
-    const amount = parseCapitalInput(raw);
-    if (cancelled || !raw || amount === currentAllocatedCapital) return;
-    if (isAlgoActive) {
-        alert('Stop the algo before changing capital.');
-        return;
-    }
-    try {
-        const res = await fetch('/api/demo/funds', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'set', amount })
-        });
-        const data = await res.json();
-        if (!data.success) {
-            alert(data.error || 'Could not update demo capital.');
-            return;
-        }
-        await refreshBalance();
-        syncCapitalToAccount();
-        if (currentResults) runBacktest();
-    } catch (err) {
-        alert('Network error updating demo capital.');
-    }
-}
-
-async function onAccountTypeChange(value) {
-    const [account] = value.split(':');
-    if (isAlgoActive) {
-        alert('Stop the algo before changing the trading mode.');
-        syncBrokerLabels();
-        return;
-    }
-    if (account === 'original' && !dhanTokenSaved && !dhanAutoLogin) {
-        alert('Add your Dhan keys first (Dhan API box: Client ID + access token, or PIN + TOTP).');
-        syncBrokerLabels();
-        toggleKeysDrawer();
-        return;
-    }
-    if (account !== currentAccountType) {
-        await switchAccount(account);
-    } else {
-        syncBrokerLabels();
-        await refreshBalance();
-        syncCapitalToAccount();
-        checkBrokerStatus();
-    }
-}
-
 function toggleInputMask(id) {
     const el = document.getElementById(id);
     if (!el) return;
     el.type = el.type === 'password' ? 'text' : 'password';
-}
-
-// Original account: let the user pick a custom algo capital or use all available Dhan funds.
-function startCustomAllocation() {
-    const input = document.getElementById('alloc-custom-input');
-    if (!input) return;
-    input.value = currentAllocatedCapital.toLocaleString('en-IN');
-    input.classList.remove('hidden');
-    input.focus();
-    input.select();
-}
-
-function onAllocInputKey(event) {
-    if (event.key === 'Enter') event.target.blur();
-    if (event.key === 'Escape') {
-        event.target.dataset.cancel = '1';
-        event.target.blur();
-    }
-}
-
-async function saveCustomAllocation() {
-    const input = document.getElementById('alloc-custom-input');
-    if (!input || input.classList.contains('hidden')) return;
-    const cancelled = input.dataset.cancel === '1';
-    delete input.dataset.cancel;
-    const raw = input.value.trim();
-    input.classList.add('hidden');
-    if (cancelled || !raw) return;
-    const amount = parseCapitalInput(raw);
-    if (currentBalance > 0 && amount > currentBalance) {
-        alert(`Only ${formatINR(currentBalance)} is available in Dhan. The algo will be capped at that.`);
-    }
-    await setAllocation('custom', amount);
-}
-
-async function setAllocation(mode, amount) {
-    if (isAlgoActive) {
-        alert('Stop the algo before changing capital.');
-        return;
-    }
-    try {
-        const res = await fetch('/api/algo/capital', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode, amount })
-        });
-        const data = await res.json();
-        if (!data.success) {
-            alert(data.error || 'Could not update algo capital.');
-            return;
-        }
-        await refreshBalance();
-        syncCapitalToAccount();
-    } catch (err) {
-        alert('Network error updating algo capital.');
-    }
 }
 
 function applyBalanceToUI(balance, accountType, allocatedCapital, ucc, allocationMode) {
@@ -451,12 +307,6 @@ function applyBalanceToUI(balance, accountType, allocatedCapital, ucc, allocatio
 
 // Prefill backtest + strategy text with the active account's capital (only on load / switch).
 function syncCapitalToAccount() {
-    // Guards default to ±10% of capital for small accounts, ±₹15,000 otherwise.
-    const guard = currentAllocatedCapital <= 100000 ? Math.round(currentAllocatedCapital * 0.10) : 15000;
-    const target = document.getElementById('cfg-pl-target');
-    const stop = document.getElementById('cfg-pl-stop');
-    if (target) target.value = guard;
-    if (stop) stop.value = -guard;
     refreshStrategyLabels();
     updateCapitalPreview();
     selectLiveStrategy(currentStrategyMode);
@@ -623,6 +473,7 @@ async function emergencySquareOffAll() {
 // The backtest toolbar picks what to backtest. While the algo is running it must not
 // touch the live strategy, so backtesting another strategy never prompts or switches it.
 function onQuickStrategySelect(val) {
+    renderArchitecture(val);
     if (BACKTEST_ONLY_STRATEGIES.includes(val)) {
         updateCapitalPreview();
     } else if (!isAlgoActive) {
@@ -643,11 +494,12 @@ function onQuickPeriodSelect() {
     if (currentResults) runBacktest();
 }
 
-// Single source for backtest params: strategy & period from the toolbar,
-// capital from the account (header), everything else from Backtest Config.
+// Single source for backtest params: strategy & period from the toolbar, everything else from
+// Backtest Config. No capital is sent: the server reports what the chosen lots need.
 function runBacktest() {
     const strategy = document.getElementById('bt-quick-strategy')?.value || currentStrategyMode;
     const period = document.getElementById('bt-quick-period')?.value || '1 year';
+    renderArchitecture(strategy);
     const initialLots = parseInt(document.getElementById('cfg-initial-lots')?.value) || 1;
     const num = (id, fallback) => {
         const v = parseFloat(document.getElementById(id)?.value);
@@ -657,7 +509,6 @@ function runBacktest() {
     triggerBacktest({
         strategy_mode: strategy,
         period: period,
-        capital: currentAllocatedCapital,
         slippage: num('cfg-slippage', 0),
         exclude_last_30: !!document.getElementById('cfg-exclude-last-30')?.checked,
         initial_lots: initialLots,
@@ -666,8 +517,8 @@ function runBacktest() {
         sl_pct: num('cfg-sl-pct', 20) / 100.0,
         reentry_wait_minutes: parseInt(document.getElementById('cfg-reentry-wait')?.value) || 15,
         reentry_sl_pct: num('cfg-reentry-sl-pct', 40) / 100.0,
-        pl_target: num('cfg-pl-target', Math.round(currentAllocatedCapital * 0.10)),
-        pl_stop: num('cfg-pl-stop', -Math.round(currentAllocatedCapital * 0.10)),
+        pl_target: num('cfg-pl-target', 10000),
+        pl_stop: num('cfg-pl-stop', -10000),
         execution_mode: currentExecutionMode
     });
 }
@@ -681,43 +532,55 @@ function openConfigModal() {
 
 function onStrategyModeChange(mode) {
     currentStrategyMode = mode;
+    guardEdited = false;   // new strategy → guard follows its capital again
     updateCapitalPreview();
 }
 
 function onLotsEdited() {
-    // Typing a lot count means the user wants fixed lots, not auto-sizing.
-    const fixed = document.querySelector('input[name="cfg-sizing-mode"][value="fixed_lots"]');
-    if (fixed) fixed.checked = true;
-    updateBacktestSummaryPreview();
+    updateCapitalPreview();
 }
 
+// Ask the server what this set needs (live Dhan margin / premium), then fill the summary and,
+// unless the user set their own, the P&L guard (10% of the capital needed, max ₹15,000).
 function updateCapitalPreview() {
-    const capital = currentAllocatedCapital;
-    const sizingMode = document.querySelector('input[name="cfg-sizing-mode"]:checked')?.value || 'auto_capital';
-    const lotsInput = document.getElementById('cfg-initial-lots');
-    if (sizingMode === 'auto_capital' && lotsInput) {
-        lotsInput.value = Math.max(1, lotsFor(backtestStrategyMode(), capital));
-    }
     updateBacktestSummaryPreview();
+    clearTimeout(capitalPreviewTimer);
+    capitalPreviewTimer = setTimeout(async () => {
+        const seq = ++capitalPreviewSeq;
+        const mode = backtestStrategyMode();
+        const lots = parseInt(document.getElementById('cfg-initial-lots')?.value) || 1;
+        try {
+            const res = await fetch(`/api/capital_required?strategy=${encodeURIComponent(mode)}&lots=${lots}`);
+            const d = await res.json();
+            if (seq !== capitalPreviewSeq || !d.success) return;
+            const summary = document.getElementById('modal-summary-text');
+            if (summary) {
+                summary.innerHTML = `<strong>${formatINR(Math.round(d.to_execute))}</strong> to place ${lots} lot${lots > 1 ? 's' : ''} ` +
+                    `(${formatINR(Math.round(d.per_lot))} per lot)<br><span class="text-muted">${d.source}. ` +
+                    `The report adds the worst drawdown as a recommended cushion.</span>`;
+            }
+            if (!guardEdited) {
+                const guard = Math.min(15000, Math.round(d.to_execute * 0.10 / 500) * 500) || 500;
+                const target = document.getElementById('cfg-pl-target');
+                const stop = document.getElementById('cfg-pl-stop');
+                if (target) target.value = guard;
+                if (stop) stop.value = -guard;
+            }
+        } catch (e) {
+            console.warn('Capital preview failed', e);
+        }
+    }, 250);
 }
 
 function updateBacktestSummaryPreview() {
     const stratSelect = document.getElementById('bt-quick-strategy');
     const periodSelect = document.getElementById('bt-quick-period');
-    const stratName = stratSelect?.selectedOptions[0]?.textContent.trim() || currentStrategyMode;
+    const stratName = stratSelect?.selectedOptions[0]?.dataset.base || stratSelect?.selectedOptions[0]?.textContent.trim() || currentStrategyMode;
     const periodName = periodSelect?.selectedOptions[0]?.textContent.trim() || '1 Year';
-    const lotCount = parseInt(document.getElementById('cfg-initial-lots')?.value) || 1;
-    const lotSize = parseInt(document.getElementById('cfg-lot-size')?.value) || 65;
-    const capitalText = formatINR(currentAllocatedCapital);
-
     const context = document.getElementById('modal-context-line');
     if (context) {
-        context.innerHTML = `<strong>${stratName}</strong> • ${periodName} • Capital <strong>${capitalText}</strong>` +
-            `<span class="text-muted"> — change strategy &amp; period in the toolbar, capital in the header.</span>`;
-    }
-    const summaryText = document.getElementById('modal-summary-text');
-    if (summaryText) {
-        summaryText.innerHTML = `Backtesting <strong>${stratName}</strong> over <strong>${periodName}</strong> with <strong>${capitalText}</strong> capital • ${lotCount} Lot${lotCount > 1 ? 's' : ''} (${lotCount * lotSize} qty per leg).`;
+        context.innerHTML = `<strong>${stratName}</strong> • ${periodName}` +
+            `<span class="text-muted"> — change strategy &amp; period in the toolbar.</span>`;
     }
 }
 
@@ -1037,7 +900,7 @@ function updateAlgoStatusUI(st) {
             badge.textContent = 'ALGO IDLE';
         }
         if (desc) {
-            desc.innerHTML = `Algo engine is idle on <strong>${modeLabel}</strong>. Capital: <strong>${formatINR(currentAllocatedCapital)}</strong>. Click <strong>Start Algo</strong> to arm execution, or click <strong>⚡ Test Trigger</strong> to simulate an instant cycle.`;
+            desc.innerHTML = `Algo engine is idle on <strong>${modeLabel}</strong>. Click <strong>Start Algo</strong> to arm execution, or click <strong>⚡ Test Trigger</strong> to simulate an instant cycle.`;
         }
     }
 
@@ -1201,6 +1064,143 @@ async function runPaperTestCycle() {
     }
 }
 
+// ---------- "How this strategy works" panel: rebuilt for the strategy picked in the toolbar ----------
+// Each card: [colour, tag, title, steps]; a step is text or [text, colour] with colour one of
+// danger / success / cyan / warning. Values from Backtest Config (SL %, guard, re-entry) are filled in.
+function strategyArchitecture(mode) {
+    const v = (id, d) => { const x = parseFloat(document.getElementById(id)?.value); return isNaN(x) ? d : x; };
+    const lots = Math.max(1, parseInt(document.getElementById('cfg-initial-lots')?.value) || 1);
+    const lotSize = parseInt(document.getElementById('cfg-lot-size')?.value) || 65;
+    const qty = `${lots} lot${lots > 1 ? 's' : ''} • ${lots * lotSize} qty`;
+    const sl = v('cfg-sl-pct', 20), resl = v('cfg-reentry-sl-pct', 40), wait = v('cfg-reentry-wait', 15);
+    const tgt = formatINR(Math.abs(v('cfg-pl-target', 10000))), stp = formatINR(Math.abs(v('cfg-pl-stop', -10000)));
+    const nifty = 'NIFTY 50 options, current weekly expiry';
+    const sellLeg = (opt, other) => ['ce' === opt.toLowerCase() ? 'ce' : 'pe', opt === 'CE' ? 'BRANCH 1' : 'BRANCH 2', `${opt} Leg (Sell)`, [
+        `Sell <strong>ATM ${opt}</strong> (${qty})`,
+        `Stop-loss: premium rises <strong>${sl}%</strong> above entry`,
+        [`If SL hit: <strong>close all open legs</strong> (incl. ${other})`, 'danger'],
+        [`Wait <strong>${wait} min</strong> ➔ re-enter a fresh ATM straddle with a <strong>${resl}%</strong> SL`, 'cyan']]];
+    const guard = ['guard', 'BRANCH 3', 'Day P&L Guard', [
+        'Checks the total P&L of all open legs',
+        [`Profit ≥ <strong>+${tgt}</strong> ➔ close everything`, 'success'],
+        [`Loss ≥ <strong>−${stp}</strong> ➔ close everything, stop for the day`, 'danger']]];
+    const eod = (t) => ['time', 'BRANCH 4', 'Time Exit', [`Hard exit at <strong>${t}</strong>`, ['Square off anything still open', 'warning']]];
+    const buyer = (trigger, entry, slTxt, tgtTxt, exitT, extra = []) => [
+        ['ce', 'STEP 1', 'Setup', trigger],
+        ['pe', 'STEP 2', 'Entry', entry],
+        ['guard', 'STEP 3', 'Stop-loss & Target', [[slTxt, 'danger'], [tgtTxt, 'success'], ...extra]],
+        eod(exitT)];
+
+    const A = {
+        hedged_selling: { when: '10:00 AM IST (Mon–Fri)', under: nifty, cards: [
+            ['ce', 'BRANCH 1', 'Straddle (Sell)', [`Sell <strong>ATM CE + ATM PE</strong> (${qty})`, `Each leg: stop-loss at <strong>+${sl}%</strong> premium`,
+                [`If a leg's SL hits: <strong>close all legs</strong>`, 'danger'], [`Wait <strong>${wait} min</strong> ➔ re-enter fresh straddle, <strong>${resl}%</strong> SL`, 'cyan']]],
+            ['pe', 'BRANCH 2', 'Protective Wings (Buy)', ['Buy <strong>ATM +300 CE</strong> and <strong>ATM −300 PE</strong>', 'Caps the loss if NIFTY runs far either way',
+                ['Cuts margin from ~₹2.5L to ~₹1L per lot', 'success']]],
+            guard, eod('3:25 PM IST')] },
+        short_straddle: { when: '10:00 AM IST (Mon–Fri)', under: nifty + ' • no hedge', cards: [
+            sellLeg('CE', 'PE'), sellLeg('PE', 'CE'), guard, eod('3:25 PM IST')] },
+        trend_hedged_straddle: { when: '10:00 AM IST (Mon–Fri)', under: nifty, cards: [
+            ['ce', 'BRANCH 1', 'Straddle (Sell)', [`Sell <strong>ATM CE + ATM PE</strong> (${qty})`, `Each leg: stop-loss at <strong>+${sl}%</strong> premium`,
+                [`If a leg's SL hits: <strong>close all legs</strong>`, 'danger'], [`Wait <strong>${wait} min</strong> ➔ re-enter, <strong>${resl}%</strong> SL`, 'cyan']]],
+            ['pe', 'BRANCH 2', 'One Wing (Buy)', ["Compare 9:15 open with yesterday's close",
+                ['Opened <strong>up</strong> ➔ buy ATM +300 CE', 'success'], ['Opened <strong>down</strong> ➔ buy ATM −300 PE', 'danger'], ['Other side stays unhedged', 'warning']]],
+            guard, eod('3:25 PM IST')] },
+        option_buying: { when: '10:00 AM IST (Mon–Fri)', under: nifty, cards: [
+            ['ce', 'BRANCH 1', 'Buy Call', [`Buy <strong>ATM CE</strong> (${qty})`, 'Gains if NIFTY rallies hard']],
+            ['pe', 'BRANCH 2', 'Buy Put', [`Buy <strong>ATM PE</strong> (${qty})`, 'Gains if NIFTY falls hard']],
+            ['guard', 'BRANCH 3', 'Day P&L Guard', [[`Profit ≥ <strong>+${tgt}</strong> ➔ close both`, 'success'], [`Loss ≥ <strong>−${stp}</strong> ➔ close both`, 'danger'],
+                ['Worst case: the premium paid', 'warning']]],
+            eod('3:25 PM IST')] },
+        nifty_10_12_put: { when: '9:20 AM – 2:30 PM IST (Mon–Fri)', under: nifty, cards: buyer(
+            ['Mark <strong>high & low</strong> of the first 5-min candle (9:15–9:20)'],
+            [['A candle breaks the <strong>high</strong> ➔ buy ATM CE', 'success'], ['A candle breaks the <strong>low</strong> ➔ buy ATM PE', 'danger'],
+                `Bought when that candle closes (${qty})`, ['No break by 2:30 PM ➔ no trade', 'warning']],
+            'Stop-loss: <strong>15 points</strong> below the buy price (e.g. ₹150 ➔ ₹135)', 'Target: <strong>15 points</strong> above the buy price (e.g. ₹150 ➔ ₹165)', '3:15 PM IST',
+            ['One trade a day']) },
+        nifty_gap_drive: { when: '9:45 AM IST (Mon–Fri)', under: nifty, cards: buyer(
+            ["Gap = 9:15 open − yesterday's close", ['Gap must be at least <strong>±20 pts</strong>, else no trade', 'warning']],
+            [['Gap <strong>up</strong> ➔ buy ATM CE', 'success'], ['Gap <strong>down</strong> ➔ buy ATM PE', 'danger'], `At 9:45 (${qty})`],
+            'Stop-loss: premium falls <strong>25%</strong>', 'Target: premium up <strong>50%</strong> (1:2)', '3:15 PM IST') },
+        nifty_1pm_drop: { when: '1:15 PM IST (Mon–Fri)', under: nifty + ' • buys a Put', cards: buyer(
+            ['Watch candles <strong>12:45 – 1:15 PM</strong> (European open)', ['Needs <strong>2 or more red</strong> candles, else no trade', 'warning']],
+            [`Buy <strong>ATM PE</strong> at the 1:15 candle close (${qty})`],
+            'Stop-loss: premium falls <strong>30%</strong>, trails 15% below the best price', 'Target: premium up <strong>60%</strong> (1:2)', '3:15 PM IST') },
+        nifty_orb_945: { when: '9:20 – 9:45 AM IST (Mon–Fri)', under: nifty, cards: buyer(
+            ['Mark <strong>high & low</strong> of the first 5-min candle (9:15–9:20)', 'Range = high − low'],
+            [['First break of the <strong>high</strong> before 9:45 ➔ buy ATM CE', 'success'], ['First break of the <strong>low</strong> before 9:45 ➔ buy ATM PE', 'danger'],
+                [`No break by 9:45 ➔ no trade (${qty})`, 'warning']],
+            'Stop-loss: NIFTY back to the <strong>other end</strong> of the first candle', 'Target: <strong>2 × range</strong> beyond the break (1:2)', '3:15 PM IST',
+            ['One trade a day']) },
+        gold_trend_futures: { when: '10:00 AM IST (Mon–Fri, MCX)', under: 'MCX Gold Mini futures (100 g / lot), front month', cards: buyer(
+            ["Compare 9:00 AM open with yesterday's close"],
+            [['Opened <strong>up</strong> ➔ BUY 1 lot', 'success'], ['Opened <strong>down</strong> ➔ SELL 1 lot', 'danger'], 'Entry at 10:00 AM'],
+            'Stop-loss: <strong>0.5%</strong> against the trade', 'Target: <strong>1%</strong> in favour (1:2)', '11:00 PM IST') },
+    };
+    return A[mode] || A.hedged_selling;
+}
+
+function renderArchitecture(mode) {
+    mode = mode || backtestStrategyMode();
+    const a = strategyArchitecture(mode);
+    const title = document.getElementById('arch-title');
+    if (title) title.textContent = `How it works: ${STRATEGY_META[mode]?.name || STRATEGY_NAMES[mode] || mode}`;
+    const root = document.getElementById('arch-root');
+    if (root) root.innerHTML = `<div class="node-badge">START TRIGGER</div><div class="node-title">${a.when}</div><div class="node-desc">${a.under}</div>`;
+    const grid = document.getElementById('arch-branches');
+    if (!grid) return;
+    grid.innerHTML = a.cards.map(([colour, tag, name, steps]) => `
+        <div class="branch-card branch-${colour}">
+            <div class="branch-header"><span class="branch-tag tag-${colour}">${tag}</span><span class="branch-title">${name}</span></div>
+            <div class="branch-body">${steps.map((st, i) => {
+                const [txt, c] = Array.isArray(st) ? st : [st, ''];
+                return `<div class="step-item${c ? ' text-' + c : ''}"><span class="step-num">${i + 1}</span><span>${txt}</span></div>`;
+            }).join('')}</div>
+        </div>`).join('');
+}
+
+// ---------- Real data status: which days have real Dhan option prices ----------
+let optionDownloadTimer = null;
+
+function renderRealData(rd) {
+    const el = document.getElementById('real-data-banner');
+    if (!el || !rd) return;
+    el.classList.remove('hidden');
+    const skipped = rd.skipped_count ? ` • ${rd.skipped_count} day(s) left out (no Dhan candle for a needed strike)` : '';
+    if (!rd.missing) {
+        el.className = 'real-data-banner ok';
+        el.innerHTML = `✅ <strong>Real data only:</strong> ${rd.source} for all ${rd.days_total} days${skipped}. No modelled prices.`;
+        el.title = (rd.skipped || []).join('\n');
+        return;
+    }
+    el.className = 'real-data-banner pending';
+    el.innerHTML = `⏳ <strong>Real data only:</strong> Dhan option prices are cached for ${rd.days_with_prices} of ${rd.days_total} days, `
+        + `so this result covers only those days. Downloading the other ${rd.missing} <span id="opt-dl-progress"></span>. `
+        + `The backtest re-runs by itself when it's done.`;
+    pollOptionDownload();
+}
+
+function pollOptionDownload() {
+    clearTimeout(optionDownloadTimer);
+    optionDownloadTimer = setTimeout(async () => {
+        try {
+            const r = await (await fetch('/api/option_history/status')).json();
+            const st = r.data || {};
+            const prog = document.getElementById('opt-dl-progress');
+            if (st.running) {
+                const eta = st.eta_seconds ? ` • about ${Math.max(1, Math.round(st.eta_seconds / 60))} min left` : '';
+                if (prog) prog.textContent = `(${st.done} / ${st.total} days${eta})`;
+                pollOptionDownload();
+            } else if (st.error) {
+                const el = document.getElementById('real-data-banner');
+                if (el) { el.className = 'real-data-banner error'; el.innerHTML = `⚠️ Dhan option download stopped: ${st.error}`; }
+            } else {
+                runBacktest();   // download finished: re-run with every day priced
+            }
+        } catch (e) { pollOptionDownload(); }
+    }, 4000);
+}
+
 function toggleArchitecture() {
     const body = document.getElementById('arch-body');
     const label = document.getElementById('arch-toggle-label');
@@ -1287,7 +1287,11 @@ function renderDashboard(results) {
 
     // Display Active Period & Capital Prominently
     const periodDisplay = results.params ? results.params.period.toUpperCase() : "1 YEAR";
-    const capitalDisplay = results.params ? `₹${results.params.capital.toLocaleString('en-IN')}` : "₹40,000";
+    const need = results.capital_required || {};
+    const capitalDisplay = need.to_execute ? formatINR(Math.round(need.to_execute)) : (results.params ? formatINR(results.params.capital) : '—');
+    const capitalSub = need.to_execute
+        ? `Recommended ${formatINR(Math.round(need.recommended))} (+ worst drawdown ${formatINR(Math.round(need.worst_drawdown))}) • ${need.live ? 'live from Dhan' : need.source}`
+        : '';
     const lotSize = results.params?.lot_size || 65;
     const lotsNum = results.params ? results.params.initial_lots : 1;
     const isGold = (results.strategy_id || results.strategy_mode) === 'gold_trend_futures';
@@ -1297,9 +1301,10 @@ function renderDashboard(results) {
     const stMode = results.strategy_id || results.strategy_mode || currentStrategyMode || 'hedged_selling';
     const stratNames = {
         'hedged_selling': 'Hedged Selling (Iron Butterfly)',
-        'nifty_10_12_put': '10:12 Bearish Put Breakdown',
+        'nifty_10_12_put': 'First Candle Breakout (All Day, SL 15 / TP 15)',
         'nifty_gap_drive': 'Nifty Gap Drive Momentum',
         'nifty_1pm_drop': '1 PM Volatility Drop',
+        'nifty_orb_945': 'First Candle Breakout (1:2)',
         'option_buying': 'Option Buying (Long Straddle)',
         'short_straddle': 'Classic Short Straddle',
         'trend_hedged_straddle': 'Trend-Hedged Short Straddle',
@@ -1322,10 +1327,21 @@ function renderDashboard(results) {
     if (barMode) barMode.textContent = modeText;
 
     const barPeriod = document.getElementById('bar-period-val');
-    if (barPeriod) barPeriod.textContent = `${periodDisplay} (${results.total_days} Trading Days)`;
+    if (barPeriod) {
+        const ec = results.equity_curve || [];
+        const fmtD = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const range = ec.length ? ` • ${fmtD(ec[0].date)} → ${fmtD(ec[ec.length - 1].date)}` : '';
+        const ex = results.params?.exclude_last_30 ? ' • ⚠ last 30 days excluded' : '';
+        barPeriod.textContent = `${periodDisplay} (${results.total_days} Trading Days)${range}${ex}`;
+    }
 
     const barCapital = document.getElementById('bar-capital-val');
-    if (barCapital) barCapital.textContent = capitalDisplay;
+    if (barCapital) {
+        barCapital.textContent = capitalDisplay;
+        barCapital.title = need.source || '';
+    }
+    const barCapitalSub = document.getElementById('bar-capital-sub');
+    if (barCapitalSub) barCapitalSub.textContent = capitalSub;
 
     const barLots = document.getElementById('bar-lots-val');
     if (barLots) barLots.textContent = lotsDisplay;
@@ -1362,6 +1378,7 @@ function renderDashboard(results) {
     document.getElementById('stat-time-exit').textContent = `${bb.time_exit_count || 0}`;
 
     // 3. Render Charts
+    renderRealData(results.real_data);
     renderEquityCurve(results.equity_curve);
     renderMonthlyMatrix(results.monthly_matrix);
     renderPnLDistribution(results.trade_logs);
@@ -1774,7 +1791,8 @@ async function inspectDay(dateStr) {
 
         const day = data.data;
         document.getElementById('day-modal-title').textContent = `Session Audit: ${day.date} (${day.day_name})`;
-        document.getElementById('day-modal-subtitle').textContent = `Spot @ 10:00: ${day.spot_at_entry} | Exit Reason: ${day.exit_reason}`;
+        const exitAt = (day.positions_detail || []).map(p => p.exit_time).filter(Boolean).sort().pop();
+        document.getElementById('day-modal-subtitle').textContent = `Entry ${day.entry_time || ''} @ NIFTY ${day.spot_at_entry} | Exit${exitAt ? ' ' + exitAt : ''}: ${day.exit_reason}`;
 
         // Top Badges
         const isPos = day.net_pnl >= 0;
@@ -1788,28 +1806,67 @@ async function inspectDay(dateStr) {
             <div class="stats-pill"><span class="pill-label">Re-entries:</span><span class="pill-val text-cyan">${day.reentry_count} Sets</span></div>
         `;
 
-        // Positions sub-table
+        // Positions sub-table: per-order value (premium × qty) and day totals
         const posTbody = document.getElementById('day-positions-tbody');
+        const posTfoot = document.getElementById('day-positions-tfoot');
         posTbody.innerHTML = '';
+        const rs = (v) => `₹${Math.abs(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const signed = (v) => `${v >= 0 ? '+' : '−'}${rs(v)}`;
+        let paid = 0, received = 0, exitPaid = 0, exitReceived = 0, legPnl = 0;
         (day.positions_detail || []).forEach(pos => {
+            const isBuy = String(pos.side || 'SELL').toUpperCase() === 'BUY';
+            // Gold Mini prices are ₹ per 10 g and qty is grams; options are ₹ per unit.
+            const mult = pos.type === 'FUT' ? pos.qty / 10 : pos.qty;
+            const entryVal = pos.entry_price * mult;
+            const exitVal = (pos.exit_price || 0) * mult;
+            if (isBuy) { paid += entryVal; exitReceived += exitVal; } else { received += entryVal; exitPaid += exitVal; }
+            legPnl += pos.pnl;
             const pnlPos = pos.pnl >= 0;
             const r = document.createElement('tr');
             r.innerHTML = `
                 <td><strong>${pos.leg}</strong></td>
                 <td><span class="badge">${pos.branch}</span></td>
+                <td><span class="${isBuy ? 'text-success' : 'text-danger'}">${isBuy ? 'BUY' : 'SELL'}</span></td>
                 <td>${pos.qty}</td>
+                <td>${pos.entry_time || '-'}</td>
                 <td>₹${pos.entry_price.toFixed(2)}</td>
-                <td>₹${pos.exit_price.toFixed(2)}</td>
-                <td><span class="badge-tag">${pos.exit_reason || '-'}</span></td>
-                <td><strong class="${pnlPos ? 'text-success' : 'text-danger'}">${pnlPos ? '+' : ''}₹${pos.pnl.toFixed(2)}</strong></td>
+                <td title="${isBuy ? 'Premium paid' : 'Premium received'}">${rs(entryVal)} <small class="text-muted">${isBuy ? 'paid' : 'recd'}</small></td>
+                <td>₹${(pos.exit_price || 0).toFixed(2)}</td>
+                <td>${rs(exitVal)} <small class="text-muted">${isBuy ? 'recd' : 'paid'}</small></td>
+                <td><strong>${pos.exit_time || '-'}</strong></td>
+                <td><span class="badge-tag">${pos.exit_reason || '-'}${pos.exit_time ? ' @ ' + pos.exit_time : ''}</span></td>
+                <td><strong class="${pnlPos ? 'text-success' : 'text-danger'}">${signed(pos.pnl)}</strong></td>
             `;
             posTbody.appendChild(r);
         });
+        if (posTfoot) {
+            const netEntry = received - paid;   // >0 credit, <0 debit
+            const hasLegs = (day.positions_detail || []).length > 0;
+            const legsAreGross = Math.abs(legPnl - day.net_pnl) > 0.5;   // seller legs exclude charges
+            posTfoot.innerHTML = !hasLegs ? '' : `
+                <tr class="totals-row">
+                    <td colspan="6"><strong>Total</strong></td>
+                    <td><div>Paid ${rs(paid)}</div><div>Recd ${rs(received)}</div></td>
+                    <td></td>
+                    <td><div>Recd ${rs(exitReceived)}</div><div>Paid ${rs(exitPaid)}</div></td>
+                    <td colspan="2"></td>
+                    <td><strong class="${legPnl >= 0 ? 'text-success' : 'text-danger'}">${signed(legPnl)}</strong></td>
+                </tr>
+                <tr class="totals-row">
+                    <td colspan="12">
+                        Net premium at entry: <strong class="${netEntry >= 0 ? 'text-success' : 'text-danger'}">${rs(netEntry)} ${netEntry >= 0 ? 'credit (received)' : 'debit (paid)'}</strong>
+                        ${legsAreGross ? ` • Charges <strong class="text-danger">−${rs(day.charges)}</strong>` : ''}
+                        • Net P&L for the day <strong class="${day.net_pnl >= 0 ? 'text-success' : 'text-danger'}">${signed(day.net_pnl)}</strong>
+                    </td>
+                </tr>`;
+        }
 
         // Timeline Items
         const timelineBox = document.getElementById('day-timeline-items');
         timelineBox.innerHTML = '';
-        (day.events || []).forEach(ev => {
+        // Latest first ("HH:MM" / "HH:MM:SS" sort as text).
+        [...(day.events || [])].map((ev, i) => [ev, i]).sort((a, b) =>
+            String(b[0].timestamp).localeCompare(String(a[0].timestamp)) || b[1] - a[1]).forEach(([ev]) => {
             const item = document.createElement('div');
             item.className = 'timeline-item';
             item.innerHTML = `
