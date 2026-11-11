@@ -3,14 +3,18 @@ EMA Dashboard: a small local page showing EMAs and basic details for NIFTY 50, B
 
     .venv/bin/python ema_dashboard.py            then open http://127.0.0.1:5050
 
-Data comes from Dhan through engine/dhan_client.py, so it needs the same login as the main app
-(cache/broker_config.json or the DHAN_* environment variables) and the Dhan Data API plan.
-It only reads market data. It never places orders.
+Login: paste your Dhan access token on the page. The browser keeps it and sends it with each
+request (X-Dhan-Token header); the server never stores it. Without a pasted token the server's
+own login is used (cache/broker_config.json or the DHAN_* environment variables), if it has one.
+Needs the Dhan Data API plan. It only reads market data. It never places orders.
 """
 
 from __future__ import annotations
 
+import base64
 import csv
+import hashlib
+import json
 import os
 import threading
 import time
@@ -21,7 +25,7 @@ import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, render_template, request
 
-from engine.dhan_client import CACHE_DIR, DhanError, get_client, goldm_contracts, scrip_master
+from engine.dhan_client import CACHE_DIR, DhanError, dhan_credentials, get_client, goldm_contracts, scrip_master
 
 app = Flask(__name__)
 
@@ -138,8 +142,7 @@ def _candles(client, spec: Dict[str, Any], minutes: Optional[int], now: datetime
     return client.intraday(spec["id"], spec["seg"], spec["inst"], start, now, minutes, oi=oi)
 
 
-def build(key: str, tf: str) -> Dict[str, Any]:
-    client = get_client()
+def build(key: str, tf: str, client) -> Dict[str, Any]:
     now = datetime.now()
     spec = _contract(key)
     minutes = TIMEFRAMES[tf]
@@ -233,11 +236,68 @@ def build(key: str, tf: str) -> Dict[str, Any]:
     }
 
 
+# ---------------- login ----------------
+
+class LoginNeeded(Exception):
+    pass
+
+
+def _token_info(token: str) -> Dict[str, Any]:
+    """Client ID and expiry read from the Dhan access token itself (a JWT). No network call."""
+    try:
+        part = token.split(".")[1]
+        payload = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+        client_id = str(payload["dhanClientId"])
+        exp = float(payload.get("exp") or 0)
+    except Exception:
+        raise LoginNeeded("That does not look like a Dhan access token. Copy the whole token from "
+                          "web.dhan.co → Profile → Access DhanHQ APIs.")
+    if exp and exp < time.time():
+        raise LoginNeeded(f"This token expired at {datetime.fromtimestamp(exp).strftime('%d %b %H:%M')}. "
+                          "Generate a new one on web.dhan.co and paste it again.")
+    return {"client_id": client_id, "expires": exp}
+
+
+def _client_for_request():
+    """(client, login summary): the pasted token when the browser sends one, else the server's own login."""
+    token = (request.headers.get("X-Dhan-Token") or "").strip()
+    if token:
+        info = _token_info(token)
+        client = get_client(client_id=info["client_id"], access_token=token, pin="", totp_secret="")
+        tag = hashlib.sha256(token.encode()).hexdigest()[:12]
+        return client, {"source": "pasted", "client_id": info["client_id"], "expires": info["expires"], "tag": tag}
+    creds = dhan_credentials()
+    if not creds.get("client_id") or not (creds.get("access_token") or (creds.get("pin") and creds.get("totp_secret"))):
+        raise LoginNeeded("Paste your Dhan access token to connect.")
+    if creds.get("access_token") and not creds.get("pin"):
+        _token_info(creds["access_token"])  # an expired saved token: ask for a fresh one
+    return get_client(), {"source": "server", "client_id": creds["client_id"], "expires": None, "tag": "server"}
+
+
+def _mask(client_id: str) -> str:
+    return client_id[:2] + "•" * max(0, len(client_id) - 4) + client_id[-2:] if len(client_id) > 4 else client_id
+
+
 # ---------------- routes ----------------
 
 @app.route("/")
 def index():
     return render_template("ema_dashboard.html", instruments={k: v["name"] for k, v in INSTRUMENTS.items()})
+
+
+@app.route("/api/connect", methods=["POST", "GET"])
+def api_connect():
+    """Check a login with one light Dhan call (NIFTY price) and say who is connected."""
+    try:
+        client, login = _client_for_request()
+        client.ltp({"IDX_I": [13]})
+    except LoginNeeded as exc:
+        return jsonify({"connected": False, "error": str(exc)}), 401
+    except DhanError as exc:
+        return jsonify({"connected": False, "error": str(exc)}), 401 if exc.status in (401, 403) else 502
+    exp = login["expires"]
+    return jsonify({"connected": True, "source": login["source"], "client": _mask(login["client_id"]),
+                    "expires": datetime.fromtimestamp(exp).strftime("%d %b, %H:%M") if exp else None})
 
 
 @app.route("/api/ema")
@@ -246,23 +306,30 @@ def api_ema():
     tf = request.args.get("tf", "5").upper()
     if key not in INSTRUMENTS or tf not in TIMEFRAMES:
         return jsonify({"error": "Choose NIFTY, BANKNIFTY or GOLDM, and a timeframe of 5, 15, 60 or D."}), 400
+    try:
+        client, login = _client_for_request()
+    except LoginNeeded as exc:
+        return jsonify({"error": str(exc), "login": True}), 401
     with _lock:
-        hit = _cache.get((key, tf))
+        hit = _cache.get((login["tag"], key, tf))
         if hit and time.time() - hit[0] < CACHE_SECONDS:
             return jsonify(hit[1])
     try:
-        data = build(key, tf)
+        data = build(key, tf, client)
     except DhanError as exc:
-        return jsonify({"error": str(exc)}), 502
+        login_err = exc.status in (401, 403) or exc.code in ("807", "808", "809", "DH-901")
+        return jsonify({"error": str(exc), "login": login_err}), 401 if login_err else 502
     except Exception as exc:  # keep the page alive and show what went wrong
         app.logger.exception("EMA build failed")
         return jsonify({"error": f"Could not load data: {exc}"}), 500
     with _lock:
-        _cache[(key, tf)] = (time.time(), data)
+        _cache[(login["tag"], key, tf)] = (time.time(), data)
     return jsonify(data)
 
 
 if __name__ == "__main__":
+    # EMA_DASHBOARD_HOST=0.0.0.0 makes it reachable from other devices on your network.
+    host = os.environ.get("EMA_DASHBOARD_HOST", "127.0.0.1")
     port = int(os.environ.get("EMA_DASHBOARD_PORT", "5050"))
     print(f"EMA Dashboard: http://127.0.0.1:{port}")
-    app.run(host="127.0.0.1", port=port, debug=False)
+    app.run(host=host, port=port, debug=False)
