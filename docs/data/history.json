@@ -124,5 +124,16 @@
    }
   },
   "total": 279.5
+ },
+ {
+  "date": "2026-11-11",
+  "strategies": {
+   "hedged_selling": {
+    "pnl": -620.75,
+    "status": "CLOSED",
+    "note": "Stop-loss hit on 25300 PE"
+   }
+  },
+  "total": -620.75
  }
 ]

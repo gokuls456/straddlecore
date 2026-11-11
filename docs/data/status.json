@@ -6,7 +6,7 @@
   ]
  },
  "date": "2026-11-11",
- "last_tick": "15:27:32",
+ "last_tick": "15:37:44",
  "price_source": "Dhan live",
  "quotes_error": "",
  "last_error": "",
@@ -70,12 +70,12 @@
   }
  ],
  "totals": {
-  "week": 279.5,
-  "month": -1883.05,
-  "all": -1883.05,
-  "days": 6,
+  "week": -341.25,
+  "month": -2503.8,
+  "all": -2503.8,
+  "days": 7,
   "per_strategy": {
-   "hedged_selling": 1197.95,
+   "hedged_selling": 577.2,
    "nifty_10_12_put": 0.0,
    "nifty_gap_drive": -1800.5,
    "nifty_1pm_drop": 955.5,
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-11 15:27:32 IST"
+ "updated_at": "2026-11-11 15:37:44 IST"
 }
