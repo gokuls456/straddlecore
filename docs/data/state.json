@@ -1,6 +1,6 @@
 {
-  "date": "2026-11-10",
-  "announced": false,
+  "date": "2026-11-11",
+  "announced": true,
   "summary_sent": false,
   "stale_warned": false,
   "strategies": {
@@ -11,6 +11,5 @@
       "pnl": 0.0,
       "events": []
     }
-  },
-  "no_data_noted": true
+  }
 }
