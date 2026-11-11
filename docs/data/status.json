@@ -6,7 +6,7 @@
   ]
  },
  "date": "2026-11-11",
- "last_tick": "10:21:14",
+ "last_tick": "10:31:35",
  "price_source": "Dhan live",
  "quotes_error": "",
  "last_error": "",
@@ -28,7 +28,7 @@
       "side": "BUY",
       "qty": 65,
       "entry": 129.85,
-      "cur": 125.0,
+      "cur": 127.8,
       "high": 135.55,
       "sl": null,
       "live": true
@@ -40,8 +40,8 @@
       "side": "BUY",
       "qty": 65,
       "entry": 103.35,
-      "cur": 108.4,
-      "high": 113.25,
+      "cur": 107.9,
+      "high": 117.25,
       "sl": null,
       "live": true
      },
@@ -52,7 +52,7 @@
       "side": "SELL",
       "qty": 65,
       "entry": 253.55,
-      "cur": 246.05,
+      "cur": 249.35,
       "high": 261.2,
       "sl": 304.26,
       "live": true
@@ -64,8 +64,8 @@
       "side": "SELL",
       "qty": 65,
       "entry": 214.8,
-      "cur": 223.35,
-      "high": 231.0,
+      "cur": 222.35,
+      "high": 236.9,
       "sl": 257.76,
       "live": true
      }
@@ -143,5 +143,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-11 10:21:14 IST"
+ "updated_at": "2026-11-11 10:31:35 IST"
 }
