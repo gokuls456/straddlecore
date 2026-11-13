@@ -6,8 +6,8 @@
   ]
  },
  "date": "2026-11-11",
- "last_tick": "15:39:48",
- "price_source": "Dhan live",
+ "last_tick": "",
+ "price_source": "Dhan (not connected yet)",
  "quotes_error": "",
  "last_error": "",
  "running": false,
@@ -22,7 +22,7 @@
   },
   {
    "id": "nifty_10_12_put",
-   "name": "10:12 Put",
+   "name": "First Candle Breakout",
    "status": "\u2014",
    "note": "",
    "pnl": 0.0,
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-11 15:40:18 IST"
+ "updated_at": "2026-11-13 09:00:21 IST"
 }
