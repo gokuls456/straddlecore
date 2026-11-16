@@ -1,21 +1,15 @@
 {
-  "date": "2026-11-13",
+  "date": "2026-11-16",
   "announced": true,
-  "summary_sent": true,
+  "summary_sent": false,
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "CLOSED",
-      "note": "Time exit",
+      "status": "WAITING",
+      "note": "",
       "trade": null,
-      "pnl": 962.0,
-      "events": [
-        "10:00 Entry @ NIFTY 25,209",
-        "12:08 Exit +\u20b9439",
-        "12:24 Re-entry @ NIFTY 25,104",
-        "15:25 Exit +\u20b9523"
-      ],
-      "reentry_at": "2026-11-13T12:23:52.339501"
+      "pnl": 0.0,
+      "events": []
     }
   }
 }
