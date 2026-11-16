@@ -5,8 +5,8 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "REENTRY_WAIT",
-      "note": "Stop-loss hit on 25300 PE",
+      "status": "OPEN",
+      "note": "Re-entry 15 min after stop-loss",
       "trade": {
         "kind": "seller",
         "legs": [
@@ -16,9 +16,9 @@
             "opt": "CE",
             "side": "BUY",
             "qty": 65,
-            "entry": 21.25,
-            "cur": 14.5,
-            "high": 21.25,
+            "entry": 14.7,
+            "cur": 14.7,
+            "high": 14.7,
             "sl": null,
             "live": true
           },
@@ -28,9 +28,9 @@
             "opt": "PE",
             "side": "BUY",
             "qty": 65,
-            "entry": 18.75,
-            "cur": 21.5,
-            "high": 21.5,
+            "entry": 20.95,
+            "cur": 20.95,
+            "high": 20.95,
             "sl": null,
             "live": true
           },
@@ -40,10 +40,10 @@
             "opt": "CE",
             "side": "SELL",
             "qty": 65,
-            "entry": 123.7,
-            "cur": 95.5,
-            "high": 123.7,
-            "sl": 148.44,
+            "entry": 92.0,
+            "cur": 92.0,
+            "high": 92.0,
+            "sl": 128.8,
             "live": true
           },
           {
@@ -52,25 +52,26 @@
             "opt": "PE",
             "side": "SELL",
             "qty": 65,
-            "entry": 87.95,
-            "cur": 106.35,
-            "high": 106.35,
-            "sl": 105.54,
+            "entry": 107.5,
+            "cur": 107.5,
+            "high": 107.5,
+            "sl": 150.5,
             "live": true
           }
         ],
         "target": 4000,
         "stop": -4000,
         "exit": "15:25",
-        "reentry": false,
-        "why": "Daily 10 AM entry",
-        "entry_time": "10:00",
-        "spot": 25323.85
+        "reentry": true,
+        "why": "Re-entry 15 min after stop-loss",
+        "entry_time": "10:26",
+        "spot": 25281.55
       },
       "pnl": 377.0,
       "events": [
         "10:00 Entry @ NIFTY 25,324",
-        "10:11 Exit +\u20b9377"
+        "10:11 Exit +\u20b9377",
+        "10:26 Re-entry @ NIFTY 25,282"
       ],
       "reentry_at": "2026-11-16T10:26:15.863112"
     }
