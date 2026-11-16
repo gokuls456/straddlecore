@@ -5,11 +5,72 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "WAITING",
-      "note": "",
-      "trade": null,
+      "status": "OPEN",
+      "note": "Daily 10 AM entry",
+      "trade": {
+        "kind": "seller",
+        "legs": [
+          {
+            "symbol": "NIFTY 17 NOV 25600 CE",
+            "strike": 25600,
+            "opt": "CE",
+            "side": "BUY",
+            "qty": 65,
+            "entry": 21.25,
+            "cur": 21.25,
+            "high": 21.25,
+            "sl": null,
+            "live": true
+          },
+          {
+            "symbol": "NIFTY 17 NOV 25000 PE",
+            "strike": 25000,
+            "opt": "PE",
+            "side": "BUY",
+            "qty": 65,
+            "entry": 18.75,
+            "cur": 18.75,
+            "high": 18.75,
+            "sl": null,
+            "live": true
+          },
+          {
+            "symbol": "NIFTY 17 NOV 25300 CE",
+            "strike": 25300,
+            "opt": "CE",
+            "side": "SELL",
+            "qty": 65,
+            "entry": 123.7,
+            "cur": 123.7,
+            "high": 123.7,
+            "sl": 148.44,
+            "live": true
+          },
+          {
+            "symbol": "NIFTY 17 NOV 25300 PE",
+            "strike": 25300,
+            "opt": "PE",
+            "side": "SELL",
+            "qty": 65,
+            "entry": 87.95,
+            "cur": 87.95,
+            "high": 87.95,
+            "sl": 105.54,
+            "live": true
+          }
+        ],
+        "target": 4000,
+        "stop": -4000,
+        "exit": "15:25",
+        "reentry": false,
+        "why": "Daily 10 AM entry",
+        "entry_time": "10:00",
+        "spot": 25323.85
+      },
       "pnl": 0.0,
-      "events": []
+      "events": [
+        "10:00 Entry @ NIFTY 25,324"
+      ]
     }
   }
 }
