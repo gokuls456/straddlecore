@@ -6,7 +6,7 @@
   ]
  },
  "date": "2026-11-17",
- "last_tick": "10:27:48",
+ "last_tick": "10:32:56",
  "price_source": "Dhan live",
  "quotes_error": "",
  "last_error": "",
@@ -15,10 +15,69 @@
   {
    "id": "hedged_selling",
    "name": "Iron Butterfly",
-   "status": "REENTRY_WAIT",
-   "note": "Stop-loss hit on 25350 CE",
+   "status": "OPEN",
+   "note": "Re-entry 15 min after stop-loss",
    "pnl": -315.25,
-   "open_trade": null
+   "open_trade": {
+    "kind": "seller",
+    "legs": [
+     {
+      "symbol": "NIFTY 17 NOV 25700 CE",
+      "strike": 25700,
+      "opt": "CE",
+      "side": "BUY",
+      "qty": 65,
+      "entry": 1.3,
+      "cur": 1.3,
+      "high": 1.3,
+      "sl": null,
+      "live": true
+     },
+     {
+      "symbol": "NIFTY 17 NOV 25100 PE",
+      "strike": 25100,
+      "opt": "PE",
+      "side": "BUY",
+      "qty": 65,
+      "entry": 3.35,
+      "cur": 3.35,
+      "high": 3.35,
+      "sl": null,
+      "live": true
+     },
+     {
+      "symbol": "NIFTY 17 NOV 25400 CE",
+      "strike": 25400,
+      "opt": "CE",
+      "side": "SELL",
+      "qty": 65,
+      "entry": 46.7,
+      "cur": 46.7,
+      "high": 46.7,
+      "sl": 65.38,
+      "live": true
+     },
+     {
+      "symbol": "NIFTY 17 NOV 25400 PE",
+      "strike": 25400,
+      "opt": "PE",
+      "side": "SELL",
+      "qty": 65,
+      "entry": 59.9,
+      "cur": 59.9,
+      "high": 59.9,
+      "sl": 83.86,
+      "live": true
+     }
+    ],
+    "target": 4000,
+    "stop": -4000,
+    "exit": "15:25",
+    "reentry": true,
+    "why": "Re-entry 15 min after stop-loss",
+    "entry_time": "10:32",
+    "spot": 25381.85
+   }
   },
   {
    "id": "nifty_10_12_put",
@@ -84,5 +143,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-17 10:27:48 IST"
+ "updated_at": "2026-11-17 10:32:56 IST"
 }
