@@ -6,7 +6,7 @@
   ]
  },
  "date": "2026-11-17",
- "last_tick": "15:39:50",
+ "last_tick": "",
  "price_source": "Dhan (not connected yet)",
  "quotes_error": "",
  "last_error": "",
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-17 15:40:21 IST"
+ "updated_at": "2026-11-18 09:00:17 IST"
 }
