@@ -17,7 +17,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 63.1,
-            "cur": 55.8,
+            "cur": 54.55,
             "high": 69.0,
             "sl": null,
             "live": true
@@ -29,8 +29,8 @@
             "side": "BUY",
             "qty": 65,
             "entry": 71.3,
-            "cur": 80.3,
-            "high": 80.3,
+            "cur": 79.2,
+            "high": 81.15,
             "sl": null,
             "live": true
           },
@@ -41,7 +41,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 168.4,
-            "cur": 150.4,
+            "cur": 147.7,
             "high": 180.25,
             "sl": 202.08,
             "live": true
@@ -53,8 +53,8 @@
             "side": "SELL",
             "qty": 65,
             "entry": 185.85,
-            "cur": 205.0,
-            "high": 205.0,
+            "cur": 205.05,
+            "high": 207.9,
             "sl": 223.02,
             "live": true
           }
