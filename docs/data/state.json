@@ -5,73 +5,15 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "OPEN",
-      "note": "Re-entry 15 min after stop-loss",
-      "trade": {
-        "kind": "seller",
-        "legs": [
-          {
-            "symbol": "NIFTY 23 NOV 25600 CE",
-            "strike": 25600,
-            "opt": "CE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 41.6,
-            "cur": 58.5,
-            "high": 62.95,
-            "sl": null,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 23 NOV 25000 PE",
-            "strike": 25000,
-            "opt": "PE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 40.35,
-            "cur": 26.75,
-            "high": 42.15,
-            "sl": null,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 23 NOV 25300 CE",
-            "strike": 25300,
-            "opt": "CE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 148.95,
-            "cur": 197.55,
-            "high": 203.55,
-            "sl": 208.53,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 23 NOV 25300 PE",
-            "strike": 25300,
-            "opt": "PE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 131.45,
-            "cur": 89.1,
-            "high": 136.85,
-            "sl": 184.03,
-            "live": true
-          }
-        ],
-        "target": 4000,
-        "stop": -4000,
-        "exit": "15:25",
-        "reentry": true,
-        "why": "Re-entry 15 min after stop-loss",
-        "entry_time": "11:08",
-        "spot": 25299.9
-      },
-      "pnl": -13.0,
+      "status": "CLOSED",
+      "note": "Stop-loss hit on 25300 CE",
+      "trade": null,
+      "pnl": -341.25,
       "events": [
         "10:00 Entry @ NIFTY 25,287",
         "10:53 Exit \u2212\u20b913",
-        "11:08 Re-entry @ NIFTY 25,300"
+        "11:08 Re-entry @ NIFTY 25,300",
+        "13:48 Exit \u2212\u20b9328"
       ],
       "reentry_at": "2026-11-19T11:08:14.520297"
     }
