@@ -5,9 +5,9 @@
    "hedged_selling"
   ]
  },
- "date": "2026-11-18",
- "last_tick": "",
- "price_source": "Dhan (not connected yet)",
+ "date": "2026-11-19",
+ "last_tick": "09:21:26",
+ "price_source": "Dhan live",
  "quotes_error": "",
  "last_error": "",
  "running": false,
@@ -15,9 +15,9 @@
   {
    "id": "hedged_selling",
    "name": "Iron Butterfly",
-   "status": "CLOSED",
-   "note": "Time exit",
-   "pnl": 87.75,
+   "status": "WAITING",
+   "note": "",
+   "pnl": 0.0,
    "open_trade": null
   },
   {
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-19 09:20:25 IST"
+ "updated_at": "2026-11-19 09:21:26 IST"
 }
