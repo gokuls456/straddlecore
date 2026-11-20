@@ -190,5 +190,16 @@
    }
   },
   "total": -341.25
+ },
+ {
+  "date": "2026-11-20",
+  "strategies": {
+   "hedged_selling": {
+    "pnl": 474.5,
+    "status": "CLOSED",
+    "note": "Stop-loss hit on 25650 CE"
+   }
+  },
+  "total": 474.5
  }
 ]
