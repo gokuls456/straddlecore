@@ -6,8 +6,8 @@
   ]
  },
  "date": "2026-11-20",
- "last_tick": "15:39:35",
- "price_source": "Dhan live",
+ "last_tick": "",
+ "price_source": "Dhan (not connected yet)",
  "quotes_error": "",
  "last_error": "",
  "running": false,
@@ -70,7 +70,7 @@
   }
  ],
  "totals": {
-  "week": -279.5,
+  "week": 0,
   "month": -1821.3,
   "all": -1821.3,
   "days": 13,
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-20 15:40:06 IST"
+ "updated_at": "2026-11-23 09:00:25 IST"
 }
