@@ -5,9 +5,9 @@
    "hedged_selling"
   ]
  },
- "date": "2026-11-24",
- "last_tick": "",
- "price_source": "Dhan (not connected yet)",
+ "date": "2026-11-25",
+ "last_tick": "09:30:46",
+ "price_source": "Dhan live",
  "quotes_error": "",
  "last_error": "",
  "running": false,
@@ -84,5 +84,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-25 09:20:31 IST"
+ "updated_at": "2026-11-25 09:30:46 IST"
 }
