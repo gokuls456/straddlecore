@@ -5,8 +5,8 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "OPEN",
-      "note": "Daily 10 AM entry",
+      "status": "REENTRY_WAIT",
+      "note": "Stop-loss hit on 25750 CE",
       "trade": {
         "kind": "seller",
         "legs": [
@@ -17,8 +17,8 @@
             "side": "BUY",
             "qty": 65,
             "entry": 130.65,
-            "cur": 155.4,
-            "high": 159.15,
+            "cur": 167.25,
+            "high": 167.25,
             "sl": null,
             "live": true
           },
@@ -29,7 +29,7 @@
             "side": "BUY",
             "qty": 65,
             "entry": 96.85,
-            "cur": 77.95,
+            "cur": 74.8,
             "high": 110.3,
             "sl": null,
             "live": true
@@ -41,8 +41,8 @@
             "side": "SELL",
             "qty": 65,
             "entry": 262.15,
-            "cur": 304.2,
-            "high": 310.05,
+            "cur": 321.55,
+            "high": 321.55,
             "sl": 314.58,
             "live": true
           },
@@ -53,7 +53,7 @@
             "side": "SELL",
             "qty": 65,
             "entry": 204.15,
-            "cur": 169.0,
+            "cur": 161.35,
             "high": 228.7,
             "sl": 244.98,
             "live": true
@@ -67,10 +67,12 @@
         "entry_time": "10:00",
         "spot": 25774.7
       },
-      "pnl": 0.0,
+      "pnl": -133.25,
       "events": [
-        "10:00 Entry @ NIFTY 25,775"
-      ]
+        "10:00 Entry @ NIFTY 25,775",
+        "10:55 Exit \u2212\u20b9133"
+      ],
+      "reentry_at": "2026-11-25T11:10:37.767204"
     }
   }
 }
