@@ -6,7 +6,7 @@
   ]
  },
  "date": "2026-11-26",
- "last_tick": "10:10:32",
+ "last_tick": "10:20:47",
  "price_source": "Dhan live",
  "quotes_error": "",
  "last_error": "",
@@ -17,7 +17,7 @@
    "name": "Iron Butterfly",
    "status": "OPEN",
    "note": "Daily 10 AM entry",
-   "pnl": 110.5,
+   "pnl": 74.75,
    "open_trade": {
     "kind": "seller",
     "legs": [
@@ -28,8 +28,8 @@
       "side": "BUY",
       "qty": 65,
       "entry": 82.75,
-      "cur": 88.95,
-      "high": 91.45,
+      "cur": 98.4,
+      "high": 98.4,
       "sl": null,
       "live": true
      },
@@ -40,8 +40,8 @@
       "side": "BUY",
       "qty": 65,
       "entry": 100.5,
-      "cur": 93.35,
-      "high": 100.5,
+      "cur": 77.8,
+      "high": 102.85,
       "sl": null,
       "live": true
      },
@@ -52,8 +52,8 @@
       "side": "SELL",
       "qty": 65,
       "entry": 193.9,
-      "cur": 202.55,
-      "high": 207.55,
+      "cur": 222.1,
+      "high": 222.1,
       "sl": 232.68,
       "live": true
      },
@@ -64,8 +64,8 @@
       "side": "SELL",
       "qty": 65,
       "entry": 219.5,
-      "cur": 208.2,
-      "high": 220.2,
+      "cur": 183.1,
+      "high": 228.1,
       "sl": 263.4,
       "live": true
      }
@@ -143,5 +143,5 @@
    "trend_hedged_straddle": 0.0
   }
  },
- "updated_at": "2026-11-26 10:10:32 IST"
+ "updated_at": "2026-11-26 10:20:47 IST"
 }
