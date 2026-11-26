@@ -5,73 +5,15 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "OPEN",
-      "note": "Re-entry 15 min after stop-loss",
-      "trade": {
-        "kind": "seller",
-        "legs": [
-          {
-            "symbol": "NIFTY 01 DEC 26250 CE",
-            "strike": 26250,
-            "opt": "CE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 86.25,
-            "cur": 54.3,
-            "high": 100.4,
-            "sl": null,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 01 DEC 25650 PE",
-            "strike": 25650,
-            "opt": "PE",
-            "side": "BUY",
-            "qty": 65,
-            "entry": 89.5,
-            "cur": 74.8,
-            "high": 126.5,
-            "sl": null,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 01 DEC 25950 CE",
-            "strike": 25950,
-            "opt": "CE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 198.6,
-            "cur": 156.7,
-            "high": 226.6,
-            "sl": 278.04,
-            "live": true
-          },
-          {
-            "symbol": "NIFTY 01 DEC 25950 PE",
-            "strike": 25950,
-            "opt": "PE",
-            "side": "SELL",
-            "qty": 65,
-            "entry": 205.4,
-            "cur": 191.55,
-            "high": 278.8,
-            "sl": 287.56,
-            "live": true
-          }
-        ],
-        "target": 4000,
-        "stop": -4000,
-        "exit": "15:25",
-        "reentry": true,
-        "why": "Re-entry 15 min after stop-loss",
-        "entry_time": "10:44",
-        "spot": 25931.4
-      },
-      "pnl": 91.0,
+      "status": "CLOSED",
+      "note": "Time exit",
+      "trade": null,
+      "pnl": 520.0,
       "events": [
         "10:00 Entry @ NIFTY 25,833",
         "10:29 Exit +\u20b991",
-        "10:44 Re-entry @ NIFTY 25,931"
+        "10:44 Re-entry @ NIFTY 25,931",
+        "15:25 Exit +\u20b9429"
       ],
       "reentry_at": "2026-11-26T10:44:33.765011"
     }
