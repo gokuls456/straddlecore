@@ -223,5 +223,16 @@
    }
   },
   "total": -42.25
+ },
+ {
+  "date": "2026-11-26",
+  "strategies": {
+   "hedged_selling": {
+    "pnl": 520.0,
+    "status": "CLOSED",
+    "note": "Time exit"
+   }
+  },
+  "total": 520.0
  }
 ]
