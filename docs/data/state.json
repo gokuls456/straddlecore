@@ -5,72 +5,73 @@
   "stale_warned": false,
   "strategies": {
     "hedged_selling": {
-      "status": "REENTRY_WAIT",
-      "note": "Stop-loss hit on 25850 PE",
+      "status": "OPEN",
+      "note": "Re-entry 15 min after stop-loss",
       "trade": {
         "kind": "seller",
         "legs": [
           {
-            "symbol": "NIFTY 01 DEC 26150 CE",
-            "strike": 26150,
+            "symbol": "NIFTY 01 DEC 26100 CE",
+            "strike": 26100,
             "opt": "CE",
             "side": "BUY",
             "qty": 65,
-            "entry": 53.25,
-            "cur": 41.75,
-            "high": 67.0,
+            "entry": 52.9,
+            "cur": 52.9,
+            "high": 52.9,
             "sl": null,
             "live": true
           },
           {
-            "symbol": "NIFTY 01 DEC 25550 PE",
-            "strike": 25550,
+            "symbol": "NIFTY 01 DEC 25500 PE",
+            "strike": 25500,
             "opt": "PE",
             "side": "BUY",
             "qty": 65,
-            "entry": 61.1,
-            "cur": 76.35,
-            "high": 76.35,
+            "entry": 57.35,
+            "cur": 57.35,
+            "high": 57.35,
             "sl": null,
             "live": true
           },
           {
-            "symbol": "NIFTY 01 DEC 25850 CE",
-            "strike": 25850,
+            "symbol": "NIFTY 01 DEC 25800 CE",
+            "strike": 25800,
             "opt": "CE",
             "side": "SELL",
             "qty": 65,
-            "entry": 157.0,
-            "cur": 126.35,
-            "high": 184.5,
-            "sl": 188.4,
+            "entry": 153.3,
+            "cur": 153.3,
+            "high": 153.3,
+            "sl": 214.62,
             "live": true
           },
           {
-            "symbol": "NIFTY 01 DEC 25850 PE",
-            "strike": 25850,
+            "symbol": "NIFTY 01 DEC 25800 PE",
+            "strike": 25800,
             "opt": "PE",
             "side": "SELL",
             "qty": 65,
             "entry": 169.55,
-            "cur": 205.5,
-            "high": 205.5,
-            "sl": 203.46,
+            "cur": 169.55,
+            "high": 169.55,
+            "sl": 237.37,
             "live": true
           }
         ],
         "target": 4000,
         "stop": -4000,
         "exit": "15:25",
-        "reentry": false,
-        "why": "Daily 10 AM entry",
-        "entry_time": "10:00",
-        "spot": 25843.5
+        "reentry": true,
+        "why": "Re-entry 15 min after stop-loss",
+        "entry_time": "10:46",
+        "spot": 25792.45
       },
       "pnl": -100.75,
       "events": [
         "10:00 Entry @ NIFTY 25,844",
-        "10:30 Exit \u2212\u20b9101"
+        "10:30 Exit \u2212\u20b9101",
+        "10:46 Re-entry @ NIFTY 25,792"
       ],
       "reentry_at": "2026-11-27T10:45:37.892849"
     }
